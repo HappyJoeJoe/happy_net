@@ -6,9 +6,13 @@ int process = 1;
 static void work_process_cycle()
 {
 	printf("work process %d\n", process);
-	sleep(10000);
+	//todo 子进程搞事情
 }
 
+static void master_process_cycle()
+{
+	//todo master搞事情
+}
 
 int main(int argc, char* argv[])
 {
@@ -25,7 +29,8 @@ int main(int argc, char* argv[])
 		}
 		process++;
 	}
-	printf("master process\n");
+	
+	master_process_cycle();
 
 	return 0;
 }
