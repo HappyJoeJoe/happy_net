@@ -1,11 +1,11 @@
 #include <unistd.h>
 #include <stdio.h>
 
-int process;
+int process = 1;
 
 static void work_process_cycle()
 {
-	printf("work process %d\n", process++);
+	printf("work process %d\n", process);
 	sleep(10000);
 }
 
@@ -23,6 +23,7 @@ int main(int argc, char* argv[])
 			default:
 				break;
 		}
+		process++;
 	}
 	printf("master process\n");
 
