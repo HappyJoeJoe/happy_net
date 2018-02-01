@@ -19,8 +19,9 @@ int main(int argc, char* argv[])
 			case 0:
 				work_process_cycle();
 				break;
+			default:
+				break;
 		}
-
 	}
 	printf("master process\n");
 
