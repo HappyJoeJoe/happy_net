@@ -2,7 +2,7 @@
 
 int process;
 
-static void work_process_cycle(void* )
+static void work_process_cycle()
 {
 	for(;;)
 	{
@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
 		switch(pid)
 		{
 			case 0:
-				work_process_cycle(NULL);
+				work_process_cycle();
 				break;
 			default:
 				break;
