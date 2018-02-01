@@ -4,11 +4,8 @@ int process;
 
 static void work_process_cycle()
 {
-	for(;;)
-	{
-		printf("work process %d", process++);
-		sleep(10000);
-	}
+	printf("work process %d\n", process++);
+	sleep(10000);
 }
 
 
@@ -22,11 +19,10 @@ int main(int argc, char* argv[])
 			case 0:
 				work_process_cycle();
 				break;
-			default:
-				break;
 		}
 
 	}
-	printf("master process");
+	printf("master process\n");
+
 	return 0;
 }
