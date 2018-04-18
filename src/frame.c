@@ -2,8 +2,11 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <sys/syscall.h>  
 
 #define CPU_NUM 2
+
+#define gettid() syscall(SYS_gettid)  
 
 #define RETURN_CHECK(RET) \
 	if(0 != RET) return RET;

@@ -56,11 +56,11 @@ int coctx_make( coctx_t *ctx,coctx_pfn_t pfn,const void *s,const void *s1 )
 	ctx->param->s1 = s;
 	ctx->param->s2 = s1;
 
-	ctx->regs[ 0:RSP ] = (char*)(ctx->param) + 8;
-	ctx->regs[ 1:RIP ] = (char*)pfn;
-	ctx->regs[ 2:RBX ] = stack + ctx->ss_size - 1;
-	ctx->regs[ 3:RDI ] = (char*)s;
-	ctx->regs[ 4:RSI ] = (char*)s1;
+	ctx->regs[RSP] = (char*)(ctx->param) + 8;
+	ctx->regs[RIP] = (char*)pfn;
+	ctx->regs[RBX] = stack + ctx->ss_size - 1;
+	ctx->regs[RDI] = (char*)s;
+	ctx->regs[RSI] = (char*)s1;
 
 	return 0;
 }
@@ -69,6 +69,4 @@ int coctx_init( coctx_t *ctx )
 	memset( ctx,0,sizeof(*ctx));
 	return 0;
 }
-
-#endif
 
