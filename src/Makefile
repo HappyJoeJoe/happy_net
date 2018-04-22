@@ -1,1 +1,1 @@
-gcc -g -o app coctx.cpp coctx_swap.S epoll.c frame.c hook.c -ldl
+gcc -g -o app epoll.c frame.c hook.c -ldl

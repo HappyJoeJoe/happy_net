@@ -1,22 +1,27 @@
-1. 	int setcontext(const ucontext* ucp)
-	1) 函数转移执行流到 ucp 指向的上下文中，执行流继续到 ucp 保存的点上。
-	2) setcontext 不会返回
+以下内容翻译自 wiki 百科：
+	链接: https://en.wikipedia.org/wiki/Setcontext
 
-2. 	int getcontext(ucontext_t *ucp)
-	1) 保存当前上下文到 ucp 中，这个函数以两种可能的方式下返回：1）初始化调用以后。2）通过 setcontext or swapcontext 调用，一个线程转向 ucp 上下文中
-	2) getcontext 的返回值不会区分这两种情况，所以程序员需要用一个显示的 flag 变量(不一定是一个寄存器变量，但是一个已声明的 violate 变量防止编译器优化）
+	1. 	int setcontext(const ucontext* ucp)
+		1) 函数转移执行流到 ucp 指向的上下文中，执行流继续到 ucp 保存的点上。
+		2) setcontext 不会返回
 
-3. 	void makecontext(ucontext_t *ucp, void *func(), int argc, ...)
-	1) makecontext 创建了一个可以交替执行的线程在 ucp(ucp 之前已经被 getcontext 初始化过)中
-	2) ucp.uc_stack 应该指向一个合适大小的栈。常量 SIGSTKSZ 普遍被使用。
-	3) 当 ucp 跳到使用 setcontext or swapcontext 的地方时，执行流会转到 func 的入口处。当 func 返回时，控制流转向 ucp.uc_link 处
+	2. 	int getcontext(ucontext_t *ucp)
+		1) 保存当前上下文到 ucp 中，这个函数以两种可能的方式下返回：
+			1.1	初始化调用以后。
+			1.2	通过 setcontext or swapcontext 调用，一个线程转向 ucp 上下文中
+		2) getcontext 的返回值不会区分这两种情况，所以程序员需要用一个显示的 flag 变量(不一定是一个寄存器变量，但是一个已声明的 violate 变量防止编译器优化）
 
-4.	int swapcontext(ucontext_t *oucp, ucontext_t *ucp)
-	1) 转向控制流到 ucp 中，保存当前上下文到 oucp 中。
+	3. 	void makecontext(ucontext_t *ucp, void *func(), int argc, ...)
+		1) makecontext 创建了一个可以交替执行的线程在 ucp(ucp 之前已经被 getcontext 初始化过)中
+		2) ucp.uc_stack 应该指向一个合适大小的栈。常量 SIGSTKSZ 普遍被使用。
+		3) 当 ucp 跳到使用 setcontext or swapcontext 的地方时，执行流会转到 func 的入口处。当 func 返回时，控制流转向 ucp.uc_link 处
 
-5. 	从 getcontext 返回以后，不能判断是直接调用 getcontext 后返回的，还是从 setcontext or swapcontext 返回的。所以在不能判断 getcontext 返回的状态时，要保存额外的信息来进行判断，显得比较麻烦。所以 ucontext 机制提供了 swapcontext 来完成当前上下文的保存，和目标上下文的切换。
+	4.	int swapcontext(ucontext_t *oucp, ucontext_t *ucp)
+		1) 转向控制流到 ucp 中，保存当前上下文到 oucp 中。
+
+	5. 	从 getcontext 返回以后，不能判断是直接调用 getcontext 后返回的，还是从 setcontext or swapcontext 返回的。所以在不能判断 getcontext 返回的状态时，要保存额外的信息来进行判断，显得比较麻烦。所以 ucontext 机制提供了 swapcontext 来完成当前上下文的保存，和目标上下文的切换。
 
 
-https://en.wikipedia.org/wiki/Setcontext
+
 
 

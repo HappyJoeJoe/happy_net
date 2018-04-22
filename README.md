@@ -10,8 +10,9 @@ version ：1.0
 1. 可模块化（暂不）
 
 内存分配：
-1. stl allocate
-2. 暂不适用内存池
+1. 使用 malloc/free
+2. 暂不使用内存池
+3. 暂不使用 slab 机制
 
 网络 I/O 多路复用：
 1. epoll
