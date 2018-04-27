@@ -2,6 +2,7 @@
 #define __CO_THREAD_H__
 
 #include <ucontext.h>
+// #include "co_schedule.h"
 
 #define DEFAULT_STACK_SIZE (1024 * 128)
 
@@ -13,18 +14,14 @@
 
 #define co_release() co_thread::release()
 
+#define co_curr() co_thread::curr()
+
+#define co_size() co_thread::size()
+
 class co_thread;
+typedef class co_schedule co_schedule_t;
 typedef class co_thread co_thread_t;
-
 typedef void (*co_func_t)(void*);
-
-enum co_thread_stat
-{
-	FREE,
-	RUNNABLE,
-	RUNNING,
-	SUSPEND
-};
 
 
 class co_thread
@@ -43,16 +40,25 @@ public:
 
 	static int curr();
 
-	static int co_size();
+	static int size();
 
 private:
+	enum co_thread_stat
+	{
+		FREE,
+		RUNNABLE,
+		RUNNING,
+		SUSPEND
+	};
+
 	ucontext_t 				ctx;
 	co_func_t 				func;
 	void* 					arg;
 	char 					stack[DEFAULT_STACK_SIZE];
 	enum co_thread_stat 	stat;
-friend:
-	co_schedule_t;
+
+private:
+	static co_schedule_t	sche;
 };
 
 #endif
