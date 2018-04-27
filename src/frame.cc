@@ -4,8 +4,6 @@
 #include <sys/types.h>
 #include <sys/syscall.h>  
 
-#include "hook.h"
-
 #define CPU_NUM 2
 
 #define gettid() syscall(SYS_gettid)  
@@ -28,8 +26,6 @@ static int32_t master_process_cycle()
 	pid_t id = gettid();
 	printf("master process id:%d\n", id);
 	//todo master搞事情
-	int* p = malloc(sizeof(int));
-	*p = 4;
 	return 0;
 }
 

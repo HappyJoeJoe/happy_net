@@ -1,7 +1,6 @@
 #ifndef __HOOK_H__
 #define __HOOK_H__
 
-#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <stdio.h>
 #include <sys/types.h>

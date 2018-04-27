@@ -3,35 +3,56 @@
 
 #include <ucontext.h>
 
-//栈大小 128 KB
-#define MAX_STACK_SIZE (1024 * 128)
+#define DEFAULT_STACK_SIZE (1024 * 128)
 
-typedef co_thread_s co_thread_t;
+#define co_create(func, arg) co_thread::create(func, arg)
 
-typedef (void*)(*co_func_t)(void*);
+#define co_resume(id) co_thread::resume(id)
 
-typedef struct co_thread_s
-{
-	ucontext 		ctx
-	co_func_t 		func;
-	void* 			arg;
-	char 			stack[MAX_STACK_SIZE];
-	co_thread_stat 	stat;
-};
+#define co_yield() co_thread::yield()
+
+#define co_release() co_thread::release()
+
+class co_thread;
+typedef class co_thread co_thread_t;
+
+typedef void (*co_func_t)(void*);
 
 enum co_thread_stat
 {
-	int RUNNABLE;
-	int RUNNING;
-	int YIELD;
+	FREE,
+	RUNNABLE,
+	RUNNING,
+	SUSPEND
 };
 
-int co_thread_create();
 
-int co_thread_resume();
+class co_thread
+{
+public:
+	explicit co_thread() {}
+	~co_thread() {}
 
-int co_thread_yield();
+	static int create();
 
-int co_thread_finish();
+	static int resume();
+
+	static int yield();
+
+	static int release();
+
+	static int curr();
+
+	static int co_size();
+
+private:
+	ucontext_t 				ctx;
+	co_func_t 				func;
+	void* 					arg;
+	char 					stack[DEFAULT_STACK_SIZE];
+	enum co_thread_stat 	stat;
+friend:
+	co_schedule_t;
+};
 
 #endif
