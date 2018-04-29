@@ -1,0 +1,10 @@
+智能指针在 c++ 中的使用：
+
+1. 一个合格的 c++ 程序在使用指针的时候，不应该在程序代码里看到任何关于 raw pointer(裸指针) 的引用，如果你非要使用指针，请随时想起智能指针。
+eg:
+	T* p = new T(); 			//wrong usage
+	smart_ptr<T*> sp(new T())   //right usage
+
+
+2. 关于智能指针的种类如下:
+	2.1	unique_ptr 唯一指针，这种指针

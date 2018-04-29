@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/syscall.h>  
+#include "co_schedule.h"
 
 #define CPU_NUM 2
 
@@ -12,6 +13,11 @@
 	if(0 != RET) return RET;
 
 int32_t process;
+
+void func1(void*)
+{
+	printf("Yahohohohohohohohohohohoho\n");
+}
 
 static int32_t work_process_cycle()
 {
@@ -26,6 +32,7 @@ static int32_t master_process_cycle()
 	pid_t id = gettid();
 	printf("master process id:%d\n", id);
 	//todo master搞事情
+	int co_1 = co_create(func1, 0);
 	return 0;
 }
 

@@ -10,7 +10,7 @@ version ：1.0
 1. 可模块化（暂不）
 
 内存分配：
-1. 使用 malloc/free
+1. 使用 stl allocator
 2. 暂不使用内存池
 3. 暂不使用 slab 机制
 
