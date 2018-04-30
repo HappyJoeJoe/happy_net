@@ -23,11 +23,6 @@ int co_schedule::create(co_func_t func, void* arg)
 	t->func = func;
 	t->arg 	= arg;
 
-	// for (int i = 0; i < 5; ++i)
-	// {
-	// 	printf("stat:%d\n", s->threads[i]->stat);
-	// }
-
 	return id;
 }
 
@@ -53,14 +48,16 @@ int co_schedule::resume(int id)
 
 	if(cur->stat == RUNNING) return -2;
 
-	getcontext(&cur->ctx);
+	if(cur->stat == RUNNABLE)
+	{
+		getcontext(&cur->ctx);
+		cur->ctx.uc_stack.ss_sp		= cur->stack;
+		cur->ctx.uc_stack.ss_size 	= sizeof(cur->stack);
+		cur->ctx.uc_stack.ss_flags 	= 0;
+		cur->ctx.uc_link			= &(pre->ctx);
 
-	cur->ctx.uc_stack.ss_sp		= cur->stack;
-	cur->ctx.uc_stack.ss_size 	= sizeof(cur->stack);
-	cur->ctx.uc_stack.ss_flags 	= 0;
-	cur->ctx.uc_link			= &(pre->ctx);
-
-	makecontext(&cur->ctx, co_schedule::thread_body, 0);
+		makecontext(&cur->ctx, co_schedule::thread_body, 0);
+	}
 
 	pre->stat = SUSPEND;
 	cur->stat = RUNNING;
@@ -82,6 +79,7 @@ int co_schedule::yield()
 	{
 		return -1;
 	}
+	cur->stat = SUSPEND;
 	s->sche_stack.pop_back();
 	s->running--;
 	co_thread_t* pre = s->threads[s->running_co()];
