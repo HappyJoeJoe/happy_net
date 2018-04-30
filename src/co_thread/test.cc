@@ -9,25 +9,28 @@ int co_1 = 0;
 int co_2 = 0;
 int co_3 = 0;
 
-void func2(void*)
+void func2(void* arg)
 {
-	printf("Yahohohohohohohohohohohoho\n");
+	int num = *(int*)arg;
+	printf("Yahohohohohohohohohohohoho %d\n", num);
 	co_yield();
 	printf("goooooooooooooooooooooogle\n");
 }
 
-void func1(void*)
+void func1(void* arg)
 {
-	printf("Hello\n");
+	int num = *(int*)arg;
+	printf("Hello %d\n", num);
 	co_resume(co_2);
 	printf("World\n");
 }
 
 int32_t main(int32_t argc, char* argv[])
 {
-	co_1 = co_create(func1, 0);
-	printf("--------------------\n");
-	co_2 = co_create(func2, 0);
+	int arg1 = 11;
+	int arg2 = 22;
+	co_1 = co_create(func1, &arg1);
+	co_2 = co_create(func2, &arg2);
 	co_resume(co_1);
 
 	// co_3 = co_create(func1, 0);
