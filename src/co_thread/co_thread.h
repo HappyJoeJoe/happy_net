@@ -12,7 +12,7 @@
 #include <memory>
 
 //user defined header
-#include "singleton.h"
+#include "../base/singleton.h"
 
 using namespace std;
 
@@ -28,15 +28,12 @@ using namespace std;
 
 #define co_release() co_schedule::release()
 
-#define co_cur() co_schedule::cur()
-
-#define co_size() co_schedule::size()
 
 class co_thread;
 class co_schedule;
 typedef class co_thread 		co_thread_t;
 typedef vector<co_thread_t*> 	sche_stack_t;
-typedef vector<co_thread_t*> 	co_id_t;
+typedef vector<co_thread_t*> 	co_threads_t;
 typedef sche_stack_t::iterator 	sche_stack_ite;
 typedef class co_schedule 		co_schedule_t;
 typedef void (*co_func_t)(void*);
@@ -55,13 +52,12 @@ public:
 	explicit co_thread() {}
 	~co_thread() {}
 
-private:
+// private:
 	ucontext_t 				ctx;
 	co_func_t 				func;
 	void* 					arg;
 	char 					stack[DEFAULT_STACK_SIZE];
 	enum co_thread_stat		stat;
-	friend co_schedule_t;
 };
 
 
@@ -79,23 +75,18 @@ public:
 
 	static int release();
 
-	static int cur();
-
-	static int size();
+	// static void thread_body(co_schedule_t* s);
+	static void thread_body();
 
 public:
 	int running_co() { return running; }
 
 	int init_env();
 
-	void push();
-
-	int pop();
-
 // private:
 	co_thread_t 		thread_main;
 	sche_stack_t		sche_stack;
-	co_id_t 			threads;
+	co_threads_t		threads;
 	int 				running;
 	int 				max_index;
 };

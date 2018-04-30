@@ -3,7 +3,7 @@
 
 #include "lock.h"
 
-template<T>
+template<typename T>
 class singleton
 {
 private:
@@ -11,17 +11,22 @@ private:
 	~singleton() {}
 
 public:
-	static * get_instance()
+	//thread safe
+	static T* get_instance()
 	{
+		static T* t = NULL;
 		if(NULL == t)
 		{
-			t = new T();
+			// lock_t lock;
+			// {
+				if(NULL == t)
+				{
+					t = new T();
+				}
+			// }
 		}
 		return t;
 	}
-
-private:
-	static T* t;
 };
 
 #endif

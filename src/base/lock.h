@@ -4,15 +4,17 @@
 //linux header
 #include <pthread.h>
 
-typedef class lock_api 	lock_api_t;
+class lock_t;
+class lock_api;
 typedef class lock_t 	lock_t;
+typedef class lock_api 	lock_api_t;
 
 class lock_api
 {
 public:
 	explicit lock_api(pthread_mutex_t& m) : mutex(m) 
 	{
-		pthread_mutex_init(&mutex);
+		pthread_mutex_init(&mutex, 0);
 	}
 	~lock_api() 
 	{

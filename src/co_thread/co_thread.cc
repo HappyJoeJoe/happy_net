@@ -4,90 +4,135 @@ int co_schedule::create(co_func_t func, void* arg)
 {
 	int id = 0;
 	co_thread_t* t = NULL;
-	unique_ptr<co_schedule_t> cs_ptr(singleton<co_schedule_t>::get_instance());
-	if(-1 == cs_ptr->running_co())
+	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	if(-1 == s->running_co())
 	{
-		cs_ptr->init_env();
+		s->init_env();
 	}
 
-	for (id = 0; id < max_index; ++id)
+	for (id = 0; id < s->max_index; ++id)
 	{
-		if(threads[id].stat != FREE)
+		if(s->threads[id]->stat == FREE)
 		{
 			break;
 		}
 	}
 
-	t = threads[id];
+	t = s->threads[id];
 	t->stat = RUNNABLE;
 	t->func = func;
 	t->arg 	= arg;
-	t->ctx.uc_stack.ss_sp 	= t->stack;
-	t->ctx.uc_stack.ss_size = sizeof(t->stack);
-	t->ctx.uc_link	 		= &sche_stack.at(running);
+
+	// for (int i = 0; i < 5; ++i)
+	// {
+	// 	printf("stat:%d\n", s->threads[i]->stat);
+	// }
 
 	return id;
+}
+
+void co_schedule::thread_body()
+{
+	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	int id = s->running_co();
+	// printf("thread_body id:%d\n", id);
+	co_thread_t* t = s->threads[id];
+	t->func(t->arg);
+	t->stat = FREE;
+	s->sche_stack.pop_back();
+	s->running--;
 }
 
 int co_schedule::resume(int id)
 {
-	unique_ptr<co_schedule_t> cs_ptr(singleton<co_schedule_t>::get_instance());
-	
-	int running = cs_ptr.running_co();
-	if(id < 1 || id > running) return -1;
+	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	if(id < 1 || id > s->max_index) return -1;
 
-	co_thread_t* t = threads[id];
-	if(t->stat == RUNNING) return -2;
-	co_thread_t* pre = sche_stack[running - 1];
-	co_thread_t* cur = sche_stack[id];
-	swapcontext(pre, curr);
+	co_thread_t* pre = s->threads[s->running_co()];
+	co_thread_t* cur = s->threads[id];
 
-	return id;
+	if(cur->stat == RUNNING) return -2;
+
+	getcontext(&cur->ctx);
+
+	cur->ctx.uc_stack.ss_sp		= cur->stack;
+	cur->ctx.uc_stack.ss_size 	= sizeof(cur->stack);
+	cur->ctx.uc_stack.ss_flags 	= 0;
+	cur->ctx.uc_link			= &(pre->ctx);
+
+	makecontext(&cur->ctx, co_schedule::thread_body, 0);
+
+	pre->stat = SUSPEND;
+	cur->stat = RUNNING;
+
+	s->sche_stack.push_back(cur);
+	s->running++;
+
+	swapcontext(&pre->ctx, &cur->ctx);
+
+	return 0;
 }
 
 int co_schedule::yield()
 {
+	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+
+	co_thread_t* cur = s->threads[s->running_co()];
+	if(cur == &s->thread_main)
+	{
+		return -1;
+	}
+	s->sche_stack.pop_back();
+	s->running--;
+	co_thread_t* pre = s->threads[s->running_co()];
+	swapcontext(&cur->ctx, &pre->ctx);
+
 	return 0;
 }
 
 int co_schedule::release()
 {
-	return 0;
-}
+	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	sche_stack_ite it = s->threads.begin();
+	for(; it != s->threads.end(); it++)
+	{
+		if((*it)->stat != FREE)
+		{
+			return -1;
+		}
+	}
 
-int co_schedule::cur()
-{
-	return 0;
-}
+	it = s->threads.begin();
+	for(; it != s->threads.end(); it++)
+	{
+		if(*it != &s->thread_main)
+		{
+			delete *it;
+		}
+	}
 
-int co_schedule::size()
-{
+	s->running = -1;
+
 	return 0;
 }
 
 int co_schedule::init_env()
 {
 	threads.reserve(DEFAULT_THREAD_SIZE);
-	sche_stack_ite it = threads.begin();
-	for (; it != threads.end(); ++it)
+	sche_stack.reserve(DEFAULT_THREAD_SIZE);
+	max_index = DEFAULT_THREAD_SIZE;
+	int size = threads.capacity();
+	for (int i = 0; i < size; i++)
 	{
 		co_thread_t* t = new co_thread_t();
-		it->stat = FREE;
+		threads[i] = t;
+		t->stat = FREE;
 	}
 
 	running = 0;
-	sche_stack[running] = &thread_main;
-	threads[running] = &thread_main;
+	thread_main.stat = RUNNING;
+	sche_stack[running]	= &thread_main;
+	threads[running]	= &thread_main;
 
 	return 0;
-}
-
-void co_schedule::push(co_thread_t* t)
-{
-	sche_stack.push_back(t);
-}
-
-int co_schedule::pop()
-{
-	sche_stack.pop_back();
 }
