@@ -12,7 +12,7 @@ int co_3 = 0;
 void func2(void* arg)
 {
 	int num = *(int*)arg;
-	printf("Yahohohohohohohohohohohoho %d\n", num);
+	printf("yahohohohohohohohohohohoho %d\n", num);
 	co_yield();
 	printf("goooooooooooooooooooooogle\n");
 }
