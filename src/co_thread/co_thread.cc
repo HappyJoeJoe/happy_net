@@ -18,6 +18,9 @@ int co_schedule::create(co_func_t func, void* arg)
 		}
 	}
 
+	if(id == s->max_index)
+		return -1;
+
 	t = s->threads[id];
 	t->stat = RUNNABLE;
 	t->func = func;
@@ -29,9 +32,8 @@ int co_schedule::create(co_func_t func, void* arg)
 void co_schedule::thread_body()
 {
 	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
-	int id = s->running_co();
 	// printf("thread_body id:%d\n", id);
-	co_thread_t* t = s->threads[id];
+	co_thread_t* t = s->threads[s->running_co()];
 	t->func(t->arg);
 	t->stat = FREE;
 	s->sche_stack.pop_back();
@@ -46,8 +48,10 @@ int co_schedule::resume(int id)
 	co_thread_t* pre = s->threads[s->running_co()];
 	co_thread_t* cur = s->threads[id];
 
-	if(cur->stat == RUNNING) return -2;
+	// printf("stat:%d\n", cur->stat);
+	if(cur->stat == RUNNING || cur->stat == FREE) return -2;
 
+	// cur->stat should be either 'RUNNABLE' or 'SUSPEND'
 	if(cur->stat == RUNNABLE)
 	{
 		getcontext(&cur->ctx);
@@ -83,6 +87,7 @@ int co_schedule::yield()
 	s->sche_stack.pop_back();
 	s->running--;
 	co_thread_t* pre = s->threads[s->running_co()];
+	pre->stat = RUNNING;
 	swapcontext(&cur->ctx, &pre->ctx);
 
 	return 0;

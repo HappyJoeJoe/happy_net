@@ -22,7 +22,7 @@ void func1(void* arg)
 	printf("Hello %d\n", num);
 	co_resume(co_2);
 	co_resume(co_2);
-	co_resume(co_2);
+	// co_resume(co_2);
 	printf("World\n");
 }
 
@@ -34,6 +34,7 @@ int32_t main(int32_t argc, char* argv[])
 	co_2 = co_create(func2, &arg2);
 	co_resume(co_1);
 
+	co_release();
 	printf("main over\n");
 	
 	return 0;
