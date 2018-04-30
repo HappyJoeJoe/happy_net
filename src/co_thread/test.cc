@@ -22,6 +22,7 @@ void func1(void* arg)
 	printf("Hello %d\n", num);
 	co_resume(co_2);
 	co_resume(co_2);
+	co_resume(co_2);
 	printf("World\n");
 }
 

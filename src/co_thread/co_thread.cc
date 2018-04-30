@@ -75,10 +75,10 @@ int co_schedule::yield()
 	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
 
 	co_thread_t* cur = s->threads[s->running_co()];
-	if(cur == &s->thread_main)
-	{
+
+	if(cur == &s->thread_main) 
 		return -1;
-	}
+
 	cur->stat = SUSPEND;
 	s->sche_stack.pop_back();
 	s->running--;
