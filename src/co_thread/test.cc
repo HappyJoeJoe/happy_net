@@ -7,6 +7,7 @@ using namespace std;
 
 int co_1 = 0;
 int co_2 = 0;
+int co_3 = 0;
 
 void func2(void* arg)
 {
@@ -22,7 +23,6 @@ void func1(void* arg)
 	printf("Hello %d\n", num);
 	co_resume(co_2);
 	co_resume(co_2);
-	// co_resume(co_2);
 	printf("World\n");
 }
 
