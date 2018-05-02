@@ -106,10 +106,7 @@ int co_schedule::release()
 	it = s->get_threads().begin();
 	for(; it != s->get_threads().end(); it++)
 	{
-		if(*it != &s->get_thread_main())
-		{
-			delete *it;
-		}
+		delete *it;
 	}
 
 	s->set_running(-1);
