@@ -31,11 +31,11 @@ using namespace std;
 
 class co_thread;
 class co_schedule;
-typedef class co_thread 		co_thread_t;
-typedef vector<co_thread_t*> 	sche_stack_t;
-typedef vector<co_thread_t*> 	co_threads_t;
-typedef sche_stack_t::iterator 	sche_stack_ite;
-typedef class co_schedule 		co_schedule_t;
+typedef class co_thread 			co_thread_t;
+typedef class co_schedule 			co_schedule_t;
+typedef vector<co_thread_t*> 		co_sche_stack_t;
+typedef vector<co_thread_t*> 		co_threads_t;
+typedef co_sche_stack_t::iterator 	sche_stack_ite;
 typedef void (*co_func_t)(void*);
 
 enum co_thread_stat
@@ -52,7 +52,50 @@ public:
 	explicit co_thread() {}
 	~co_thread() {}
 
-// private:
+	inline void set_func(co_func_t f)
+	{
+		func = f;
+	}
+	inline co_func_t get_func()
+	{
+		return func;
+	}
+
+	inline void set_arg(void* a)
+	{
+		arg = a;
+	}
+	inline void* get_arg()
+	{
+		return arg;
+	}
+
+	inline void set_stat(enum co_thread_stat s)
+	{
+		stat = s;
+	}
+
+	inline enum co_thread_stat get_stat()
+	{
+		return stat;
+	}
+
+	inline ucontext_t& get_ctx()
+	{
+		return ctx;
+	}
+
+	inline char* get_stack()
+	{
+		return stack;
+	}
+
+	inline size_t get_stack_size()
+	{
+		return sizeof(stack);
+	}
+
+private:
 	ucontext_t 				ctx;
 	co_func_t 				func;
 	void* 					arg;
@@ -75,17 +118,36 @@ public:
 
 	static int release();
 
-	// static void thread_body(co_schedule_t* s);
 	static void thread_body();
 
 public:
-	int running_co() { return running; }
+	
 
 	int init_env();
 
+	inline co_sche_stack_t& get_sche_stack()
+	{
+		return sche_stack;
+	}
+
+	inline co_threads_t& get_threads()
+	{
+		return threads;
+	}
+
+	inline int get_running() 
+	{
+		return running; 
+	}
+
+	inline void set_running(int r)
+	{
+		running = r;
+	}
+
 // private:
 	co_thread_t 		thread_main;
-	sche_stack_t		sche_stack;
+	co_sche_stack_t		sche_stack;
 	co_threads_t		threads;
 	int 				running;
 	int 				max_index;
