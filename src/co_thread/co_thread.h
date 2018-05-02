@@ -145,7 +145,22 @@ public:
 		running = r;
 	}
 
-// private:
+	inline void set_max_index(int m)
+	{
+		max_index = m;
+	}
+
+	inline int get_max_index()
+	{
+		return max_index;
+	}
+
+	inline co_thread_t& get_thread_main()
+	{
+		return thread_main;
+	}
+
+private:
 	co_thread_t 		thread_main;
 	co_sche_stack_t		sche_stack;
 	co_threads_t		threads;

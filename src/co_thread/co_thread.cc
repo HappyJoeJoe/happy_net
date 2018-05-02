@@ -78,7 +78,7 @@ int co_schedule::yield()
 
 	co_thread_t* cur = s->get_threads()[s->get_running()];
 
-	if(cur == &s->thread_main) 
+	if(cur == &s->get_thread_main()) 
 		return -1;
 
 	cur->set_stat(SUSPEND);
@@ -106,7 +106,7 @@ int co_schedule::release()
 	it = s->get_threads().begin();
 	for(; it != s->get_threads().end(); it++)
 	{
-		if(*it != &s->thread_main)
+		if(*it != &s->get_thread_main())
 		{
 			delete *it;
 		}
@@ -131,9 +131,9 @@ int co_schedule::init_env()
 	}
 
 	set_running(0);
-	thread_main.set_stat(RUNNING);
-	get_sche_stack()[get_running()]	= &thread_main;
-	get_threads()[get_running()]	= &thread_main;
+	get_thread_main().set_stat(RUNNING);
+	get_sche_stack()[get_running()]	= &get_thread_main();
+	get_threads()[get_running()]	= &get_thread_main();
 
 	return 0;
 }
