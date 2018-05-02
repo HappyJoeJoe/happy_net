@@ -32,7 +32,6 @@ int co_schedule::create(co_func_t func, void* arg)
 void co_schedule::thread_body()
 {
 	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
-	// printf("thread_body id:%d\n", id);
 	co_thread_t* t = s->threads[s->running_co()];
 	t->func(t->arg);
 	t->stat = FREE;
@@ -48,7 +47,6 @@ int co_schedule::resume(int id)
 	co_thread_t* pre = s->threads[s->running_co()];
 	co_thread_t* cur = s->threads[id];
 
-	// printf("stat:%d\n", cur->stat);
 	if(cur->stat == RUNNING || cur->stat == FREE) return -2;
 
 	// cur->stat should be either 'RUNNABLE' or 'SUSPEND'
