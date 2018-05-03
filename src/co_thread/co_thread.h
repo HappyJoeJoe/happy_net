@@ -3,6 +3,7 @@
 
 //linux header
 #include <ucontext.h>
+#include <sys/types.h>
 
 //libc header
 #include <stdio.h>
@@ -121,7 +122,6 @@ public:
 	static void thread_body();
 
 public:
-	
 
 	int init_env();
 
@@ -161,6 +161,8 @@ public:
 	}
 
 private:
+	// static vector<co_thread_t*> g_co_thread_arr_per_thread[102400];
+
 	co_thread_t 		thread_main;
 	co_sche_stack_t		sche_stack;
 	co_threads_t		threads;

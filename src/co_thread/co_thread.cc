@@ -111,6 +111,8 @@ int co_schedule::release()
 
 	s->set_running(-1);
 
+	delete s;
+
 	return 0;
 }
 
