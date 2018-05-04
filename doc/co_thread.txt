@@ -1,0 +1,13 @@
+协程 api:
+
+1. int co_create(void (*co_func_t)(void*), void*)
+创建一个协程，并返回该协程的 id
+
+2. int co_resume(int id)
+开始执行该协程，具体执行创建该协程传入的函数
+
+3. int co_yield()
+停止运行当前协程，保存当前协程上下文并跳转执行上一个调用协程
+
+4. int co_release()
+释放协程资源
