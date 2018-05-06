@@ -1,5 +1,26 @@
 #include "co_thread.h"
 
+int co_schedule::init_env()
+{
+	get_threads().reserve(DEFAULT_THREAD_SIZE);
+	get_sche_stack().reserve(DEFAULT_THREAD_SIZE);
+	max_index = DEFAULT_THREAD_SIZE;
+	int size = get_threads().capacity();
+	for (int i = 0; i < size; i++)
+	{
+		co_thread_t* t = new co_thread_t();
+		get_threads()[i] = t;
+		t->set_stat(FREE);
+	}
+
+	set_running(0);
+	get_thread_main().set_stat(RUNNING);
+	get_sche_stack()[get_running()]	= &get_thread_main();
+	get_threads()[get_running()]	= &get_thread_main();
+
+	return 0;
+}
+
 int co_schedule::create(co_func_t func, void* arg)
 {
 	int id = 0;
@@ -116,23 +137,3 @@ int co_schedule::release()
 	return 0;
 }
 
-int co_schedule::init_env()
-{
-	get_threads().reserve(DEFAULT_THREAD_SIZE);
-	get_sche_stack().reserve(DEFAULT_THREAD_SIZE);
-	max_index = DEFAULT_THREAD_SIZE;
-	int size = get_threads().capacity();
-	for (int i = 0; i < size; i++)
-	{
-		co_thread_t* t = new co_thread_t();
-		get_threads()[i] = t;
-		t->set_stat(FREE);
-	}
-
-	set_running(0);
-	get_thread_main().set_stat(RUNNING);
-	get_sche_stack()[get_running()]	= &get_thread_main();
-	get_threads()[get_running()]	= &get_thread_main();
-
-	return 0;
-}

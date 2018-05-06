@@ -161,7 +161,7 @@ public:
 	}
 
 private:
-	// static vector<co_thread_t*> g_co_thread_arr_per_thread[102400];
+	static vector<co_thread_t*> g_co_thread_arr_per_thread[102400];
 
 	co_thread_t 		thread_main;
 	co_sche_stack_t		sche_stack;
