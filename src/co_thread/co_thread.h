@@ -167,9 +167,6 @@ public:
 	}
 
 private:
-	static void init_co_thread_arr_per_thread();
-
-private:
 	static co_schedule_t* g_co_thread_arr_per_thread[102400];
 
 	co_thread_t 		thread_main;

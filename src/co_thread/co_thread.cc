@@ -2,15 +2,6 @@
 
 co_schedule_t* co_schedule::g_co_thread_arr_per_thread[102400] = {0};
 
-void co_schedule::init_co_thread_arr_per_thread()
-{
-	// g_co_thread_arr_per_thread.reserve(102400);
-	for (int i = 0; i < 102400; ++i)
-	{
-		g_co_thread_arr_per_thread[i] = 0;
-	}
-}
-
 int co_schedule::init_env()
 {
 	pid_t tid = gettid();
