@@ -4,9 +4,13 @@
 //linux header
 #include <ucontext.h>
 #include <sys/types.h>
+// #define _GNU_SOURCE
+#include <unistd.h>
+#include <sys/syscall.h>
 
 //libc header
 #include <stdio.h>
+#include <string.h>
 
 //c++ header
 #include <vector>
@@ -21,13 +25,15 @@ using namespace std;
 
 #define DEFAULT_STACK_SIZE 		(1024 * 128)
 
-#define co_create(func, arg) co_schedule::create(func, arg)
+#define gettid() 				syscall(__NR_gettid)  
 
-#define co_resume(id) co_schedule::resume(id)
+#define co_create(func, arg) 	co_schedule::create(func, arg)
 
-#define co_yield() co_schedule::yield()
+#define co_resume(id) 			co_schedule::resume(id)
 
-#define co_release() co_schedule::release()
+#define co_yield() 				co_schedule::yield()
+
+#define co_release() 			co_schedule::release()
 
 
 class co_thread;
@@ -161,7 +167,10 @@ public:
 	}
 
 private:
-	static vector<co_thread_t*> g_co_thread_arr_per_thread[102400];
+	static void init_co_thread_arr_per_thread();
+
+private:
+	static co_schedule_t* g_co_thread_arr_per_thread[102400];
 
 	co_thread_t 		thread_main;
 	co_sche_stack_t		sche_stack;

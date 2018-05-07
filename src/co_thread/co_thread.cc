@@ -1,7 +1,27 @@
 #include "co_thread.h"
 
+co_schedule_t* co_schedule::g_co_thread_arr_per_thread[102400] = {0};
+
+void co_schedule::init_co_thread_arr_per_thread()
+{
+	// g_co_thread_arr_per_thread.reserve(102400);
+	for (int i = 0; i < 102400; ++i)
+	{
+		g_co_thread_arr_per_thread[i] = 0;
+	}
+}
+
 int co_schedule::init_env()
 {
+	pid_t tid = gettid();
+	printf("tid:%d\n", tid);
+	if(g_co_thread_arr_per_thread[tid] == 0)
+	{
+		// co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+		co_schedule_t* s = new co_schedule_t();
+		g_co_thread_arr_per_thread[tid] = s;
+	}
+
 	get_threads().reserve(DEFAULT_THREAD_SIZE);
 	get_sche_stack().reserve(DEFAULT_THREAD_SIZE);
 	max_index = DEFAULT_THREAD_SIZE;
@@ -114,6 +134,10 @@ int co_schedule::yield()
 
 int co_schedule::release()
 {
+	pid_t tid = gettid();
+	if(g_co_thread_arr_per_thread[tid] == 0) return 0;
+	g_co_thread_arr_per_thread[tid] = 0;
+
 	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
 	sche_stack_ite it = s->get_threads().begin();
 	for(; it != s->get_threads().end(); it++)
