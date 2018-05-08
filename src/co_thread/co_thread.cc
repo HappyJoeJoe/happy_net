@@ -110,7 +110,6 @@ int co_schedule::resume(int id)
 
 int co_schedule::yield()
 {
-	// co_schedule_t* s = singleton<co_schedule_t>::get_instance();
 	pid_t tid = gettid();
 	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
 	if(0 == s) return -1;
