@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <vector>
 #include <iostream>
+#include <pthread.h>
 using namespace std;
 
 int co_1 = 0;
@@ -22,9 +23,12 @@ void func1(void* arg)
 	int num = *(int*)arg;
 	printf("Hello %d\n", num);
 	co_resume(co_2);
+	printf("wahahahahahahahahahahahaha\n");
 	co_resume(co_2);
 	printf("World\n");
 }
+
+
 
 int32_t main(int32_t argc, char* argv[])
 {

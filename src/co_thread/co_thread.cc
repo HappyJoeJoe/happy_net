@@ -4,14 +4,7 @@ co_schedule_t* co_schedule::g_co_thread_arr_per_thread[102400] = {0};
 
 int co_schedule::init_env()
 {
-	pid_t tid = gettid();
 	printf("tid:%d\n", tid);
-	if(g_co_thread_arr_per_thread[tid] == 0)
-	{
-		// co_schedule_t* s = singleton<co_schedule_t>::get_instance();
-		co_schedule_t* s = new co_schedule_t();
-		g_co_thread_arr_per_thread[tid] = s;
-	}
 
 	get_threads().reserve(DEFAULT_THREAD_SIZE);
 	get_sche_stack().reserve(DEFAULT_THREAD_SIZE);
@@ -36,7 +29,13 @@ int co_schedule::create(co_func_t func, void* arg)
 {
 	int id = 0;
 	co_thread_t* t = NULL;
-	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	pid_t tid = gettid();
+	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
+	if(0 == s)
+	{
+		s = new co_schedule_t();
+		g_co_thread_arr_per_thread[tid] = s;
+	}
 	if(-1 == s->get_running())
 	{
 		s->init_env();
@@ -63,7 +62,9 @@ int co_schedule::create(co_func_t func, void* arg)
 
 void co_schedule::thread_body()
 {
-	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	pid_t tid = gettid();
+	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
+
 	co_thread_t* t = s->get_threads()[s->get_running()];
 	t->get_func()(t->get_arg());
 	t->set_stat(FREE);
@@ -73,7 +74,10 @@ void co_schedule::thread_body()
 
 int co_schedule::resume(int id)
 {
-	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	pid_t tid = gettid();
+	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
+	if(0 == s) return -1;
+
 	if(id < 1 || id > s->max_index) return -1;
 
 	co_thread_t* pre = s->get_threads()[s->get_running()];
@@ -106,7 +110,10 @@ int co_schedule::resume(int id)
 
 int co_schedule::yield()
 {
-	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	// co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	pid_t tid = gettid();
+	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
+	if(0 == s) return -1;
 
 	co_thread_t* cur = s->get_threads()[s->get_running()];
 
@@ -127,9 +134,8 @@ int co_schedule::release()
 {
 	pid_t tid = gettid();
 	if(g_co_thread_arr_per_thread[tid] == 0) return 0;
-	g_co_thread_arr_per_thread[tid] = 0;
 
-	co_schedule_t* s = singleton<co_schedule_t>::get_instance();
+	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
 	sche_stack_ite it = s->get_threads().begin();
 	for(; it != s->get_threads().end(); it++)
 	{
@@ -148,6 +154,8 @@ int co_schedule::release()
 	s->set_running(-1);
 
 	delete s;
+
+	g_co_thread_arr_per_thread[tid] = 0;
 
 	return 0;
 }

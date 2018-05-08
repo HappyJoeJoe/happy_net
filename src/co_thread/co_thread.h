@@ -114,7 +114,7 @@ private:
 class co_schedule
 {
 public:
-	explicit co_schedule():running(-1), max_index(DEFAULT_THREAD_SIZE) {}
+	explicit co_schedule():running(-1), max_index(DEFAULT_THREAD_SIZE), tid(gettid()) {}
 	~co_schedule() {}
 
 	static int create(co_func_t func, void* arg);
@@ -174,6 +174,7 @@ private:
 	co_threads_t		threads;
 	int 				running;
 	int 				max_index;
+	pid_t 				tid;
 };
 
 #endif
