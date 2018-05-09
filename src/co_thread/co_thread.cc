@@ -4,11 +4,11 @@ co_schedule_t* co_schedule::g_co_thread_arr_per_thread[102400] = {0};
 
 int co_schedule::init_env()
 {
-	printf("tid:%d\n", tid);
-
 	get_threads().reserve(DEFAULT_THREAD_SIZE);
-	get_sche_stack().reserve(DEFAULT_THREAD_SIZE);
 	max_index = DEFAULT_THREAD_SIZE;
+
+	get_sche_stack().reserve(DEFAULT_SCHEDULE_SIZE);
+	
 	int size = get_threads().capacity();
 	for (int i = 0; i < size; i++)
 	{
@@ -19,8 +19,8 @@ int co_schedule::init_env()
 
 	set_running(0);
 	get_thread_main().set_stat(RUNNING);
-	get_sche_stack()[get_running()]	= &get_thread_main();
-	get_threads()[get_running()]	= &get_thread_main();
+	get_sche_stack().push_back(&get_thread_main());
+	get_threads().push_back(&get_thread_main());
 
 	return 0;
 }
@@ -65,7 +65,8 @@ void co_schedule::thread_body()
 	pid_t tid = gettid();
 	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
 
-	co_thread_t* t = s->get_threads()[s->get_running()];
+	co_thread_t* t = s->get_sche_stack()[s->get_running()];
+
 	t->get_func()(t->get_arg());
 	t->set_stat(FREE);
 	s->get_sche_stack().pop_back();
@@ -80,7 +81,7 @@ int co_schedule::resume(int id)
 
 	if(id < 1 || id > s->max_index) return -1;
 
-	co_thread_t* pre = s->get_threads()[s->get_running()];
+	co_thread_t* pre = s->get_sche_stack()[s->get_running()];
 	co_thread_t* cur = s->get_threads()[id];
 
 	if(cur->get_stat() == RUNNING || cur->get_stat() == FREE) return -2;
@@ -101,8 +102,8 @@ int co_schedule::resume(int id)
 	cur->set_stat(RUNNING);
 
 	s->get_sche_stack().push_back(cur);
-	s->set_running(s->get_running()+1);
 
+	s->set_running(s->get_running()+1);
 	swapcontext(&pre->get_ctx(), &cur->get_ctx());
 
 	return 0;
@@ -114,7 +115,7 @@ int co_schedule::yield()
 	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
 	if(0 == s) return -1;
 
-	co_thread_t* cur = s->get_threads()[s->get_running()];
+	co_thread_t* cur = s->get_sche_stack()[s->get_running()];
 
 	if(cur == &s->get_thread_main()) 
 		return -1;
@@ -122,7 +123,8 @@ int co_schedule::yield()
 	cur->set_stat(SUSPEND);
 	s->get_sche_stack().pop_back();
 	s->set_running(s->get_running()-1);
-	co_thread_t* pre = s->get_threads()[s->get_running()];
+	co_thread_t* pre = s->get_sche_stack()[s->get_running()];
+	
 	pre->set_stat(RUNNING);
 	swapcontext(&cur->get_ctx(), &pre->get_ctx());
 

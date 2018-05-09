@@ -21,6 +21,8 @@
 
 using namespace std;
 
+#define DEFAULT_SCHEDULE_SIZE 	128
+
 #define DEFAULT_THREAD_SIZE 	1024
 
 #define DEFAULT_STACK_SIZE 		(1024 * 128)
@@ -34,6 +36,8 @@ using namespace std;
 #define co_yield() 				co_schedule::yield()
 
 #define co_release() 			co_schedule::release()
+
+#define co_cur()				co_schedule::get_running()
 
 
 class co_thread;
@@ -59,48 +63,23 @@ public:
 	explicit co_thread() {}
 	~co_thread() {}
 
-	inline void set_func(co_func_t f)
-	{
-		func = f;
-	}
-	inline co_func_t get_func()
-	{
-		return func;
-	}
+	inline void set_func(co_func_t f) { func = f; }
 
-	inline void set_arg(void* a)
-	{
-		arg = a;
-	}
-	inline void* get_arg()
-	{
-		return arg;
-	}
+	inline co_func_t get_func() { return func; }
 
-	inline void set_stat(enum co_thread_stat s)
-	{
-		stat = s;
-	}
+	inline void set_arg(void* a) { arg = a; }
 
-	inline enum co_thread_stat get_stat()
-	{
-		return stat;
-	}
+	inline void* get_arg() { return arg; }
 
-	inline ucontext_t& get_ctx()
-	{
-		return ctx;
-	}
+	inline void set_stat(enum co_thread_stat s) { stat = s; }
 
-	inline char* get_stack()
-	{
-		return stack;
-	}
+	inline enum co_thread_stat get_stat() { return stat; }
 
-	inline size_t get_stack_size()
-	{
-		return sizeof(stack);
-	}
+	inline ucontext_t& get_ctx() { return ctx; }
+
+	inline char* get_stack() { return stack; }
+
+	inline size_t get_stack_size() { return sizeof(stack); }
 
 private:
 	ucontext_t 				ctx;
@@ -131,48 +110,27 @@ public:
 
 	int init_env();
 
-	inline co_sche_stack_t& get_sche_stack()
-	{
-		return sche_stack;
-	}
+	inline co_sche_stack_t& get_sche_stack() { return sche_stack; }
 
-	inline co_threads_t& get_threads()
-	{
-		return threads;
-	}
+	inline co_threads_t& get_threads() { return threads; }
 
-	inline int get_running() 
-	{
-		return running; 
-	}
+	inline int get_running() { return running; }
 
-	inline void set_running(int r)
-	{
-		running = r;
-	}
+	inline void set_running(int r) { running = r; }
 
-	inline void set_max_index(int m)
-	{
-		max_index = m;
-	}
+	inline void set_max_index(int m) { max_index = m; }
 
-	inline int get_max_index()
-	{
-		return max_index;
-	}
+	inline int get_max_index() { return max_index; }
 
-	inline co_thread_t& get_thread_main()
-	{
-		return thread_main;
-	}
+	inline co_thread_t& get_thread_main() { return thread_main; }
 
 private:
 	static co_schedule_t* g_co_thread_arr_per_thread[102400];
 
-	co_thread_t 		thread_main;
-	co_sche_stack_t		sche_stack;
-	co_threads_t		threads;
-	int 				running;
+	co_thread_t 		thread_main;//main 执行流协程
+	co_sche_stack_t		sche_stack;	//调度协程栈
+	co_threads_t		threads;	//协程管理队列
+	int 				running;	//sche_stack 专门使用，top 表示当前运行的协程
 	int 				max_index;
 	pid_t 				tid;
 };

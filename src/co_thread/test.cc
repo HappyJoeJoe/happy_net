@@ -28,7 +28,11 @@ void func1(void* arg)
 	printf("World\n");
 }
 
-
+void func2014(void* arg)
+{
+	int num = *(int*)arg;
+	printf("%d\n", num);
+}
 
 int32_t main(int32_t argc, char* argv[])
 {
