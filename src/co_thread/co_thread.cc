@@ -104,6 +104,7 @@ int co_schedule::resume(int id)
 	s->get_sche_stack().push_back(cur);
 
 	s->set_running(s->get_running()+1);
+	
 	swapcontext(&pre->get_ctx(), &cur->get_ctx());
 
 	return 0;
