@@ -28,25 +28,20 @@ void func1(void* arg)
 	printf("World\n");
 }
 
-void func1024(void* arg)
+typedef struct test
 {
-	int num = *(int*)arg;
-	printf("func1023 %d\n", num);
-}
+	
+}test;
 
 int32_t main(int32_t argc, char* argv[])
 {
+	test* s = singleton<test>::get_instance();
+
 	int arg1 = 11;
 	int arg2 = 22;
-	// co_1 = co_create(func1, &arg1);
-	// co_2 = co_create(func2, &arg2);
-	// co_resume(co_1);
-
-	for (int i = 0; i < 1024; ++i)
-	{
-		int co_id = co_create(func1024, &i);
-		co_resume(co_id);
-	}
+	co_1 = co_create(func1, &arg1);
+	co_2 = co_create(func2, &arg2);
+	co_resume(co_1);
 
 	co_release();
 	printf("main over\n");

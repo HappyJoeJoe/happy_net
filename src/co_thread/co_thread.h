@@ -37,7 +37,7 @@ using namespace std;
 
 #define co_release() 			co_schedule::release()
 
-#define co_cur()				co_schedule::get_running()
+#define co_cur()				co_schedule::cur()
 
 
 class co_thread;
@@ -81,7 +81,12 @@ public:
 
 	inline size_t get_stack_size() { return sizeof(stack); }
 
+	inline int get_id() { return id; }
+
+	inline void set_id(int co_id) { id = co_id; }
+
 private:
+	int 					id;
 	ucontext_t 				ctx;
 	co_func_t 				func;
 	void* 					arg;
@@ -105,6 +110,8 @@ public:
 	static int release();
 
 	static void thread_body();
+
+	static int cur();
 
 public:
 

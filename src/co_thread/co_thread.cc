@@ -56,6 +56,7 @@ int co_schedule::create(co_func_t func, void* arg)
 	t->set_stat(RUNNABLE);
 	t->set_func(func);
 	t->set_arg(arg);
+	t->set_id(id);
 
 	return id;
 }
@@ -160,5 +161,15 @@ int co_schedule::release()
 	g_co_thread_arr_per_thread[tid] = 0;
 
 	return 0;
+}
+
+int co_schedule::cur()
+{
+	pid_t tid = gettid();
+	if(g_co_thread_arr_per_thread[tid] == 0) return 0;
+
+	co_schedule_t* s = g_co_thread_arr_per_thread[tid];
+	co_thread_t* cur = s->get_threads()[s->get_running()];
+	return cur->get_id();
 }
 

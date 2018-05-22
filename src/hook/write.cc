@@ -1,18 +1,18 @@
-#include "read.h"
+#include "write.h"
 
-ssize_t read(int fd, void *buf, size_t count);
+ssize_t write(int fd, void *buf, size_t count);
 {
-	static sys_read_t my_read = 0;
-	if(my_read == 0)
+	static sys_write_t my_write = 0;
+	if(my_write == 0)
 	{
-		my_read = (sys_read_t)dlsym(RTLD_NEXT, "read");
+		my_write = (sys_write_t)dlsym(RTLD_NEXT, "write");
 	}
 
 	int cur_co_id = co_cur();
 
 	struct epoll_event ee = 
 	{
-		EPOLLIN | EPOLLRDHUP,
+		EPOLLOUT,
 		cur_co_id
 	};
 
@@ -27,11 +27,11 @@ ssize_t read(int fd, void *buf, size_t count);
 
 	co_yield();
 
-	ret = my_read(fd, buf, count);
+	ret = my_write(fd, buf, count);
 	if(0 != ret)
 	{
 		ret = errno;
-		printf("read err, errno:%d\n", ret);
+		printf("write err, errno:%d\n", ret);
 	}
 
 	return ret;

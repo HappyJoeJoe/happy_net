@@ -4,9 +4,9 @@
 //linux header
 #include <pthread.h>
 
-class lock_t;
+class lock;
 class lock_api;
-typedef class lock_t 	lock_t;
+typedef class lock 		lock_t;
 typedef class lock_api 	lock_api_t;
 
 class lock_api

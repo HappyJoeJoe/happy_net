@@ -7,6 +7,7 @@
 
 typedef void *(*p_malloc_t)(size_t);
 
+
 void *malloc(size_t size)
 {
 	static int num = 0;
@@ -22,11 +23,10 @@ void *malloc(size_t size)
 	char* p = my_malloc(size);
 
 	// printf("malloc num: %d\n", num); //禁止使用printf，不然会有惊喜发生 ^_^
-	fprintf(stderr, "malloc(%lu) = %p\n", size, p);
+	fprintf(stderr, "my malloc(%lu) = %p\n", size, p);
 
 	return p;
 }
-
 
 
 

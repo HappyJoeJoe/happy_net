@@ -17,16 +17,20 @@ public:
 		static T* t = NULL;
 		if(NULL == t)
 		{
-			// lock_t lock;
-			// {
+			lock_t lock(singleton::mutex);
+			{
 				if(NULL == t)
 				{
 					t = new T();
 				}
-			// }
+			}
 		}
 		return t;
 	}
+	static pthread_mutex_t mutex;
 };
+
+template<typename T>
+pthread_mutex_t singleton<T>::mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #endif
