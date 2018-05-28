@@ -17,7 +17,7 @@
 #include <memory>
 
 //user defined header
-#include "../base/singleton.h"
+#include "singleton.h"
 
 using namespace std;
 
