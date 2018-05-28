@@ -140,6 +140,7 @@ static int32_t work_process_cycle()
 
 		io_task_queue.clear();
 
+		// -------------- epoll_wait --------------
 		int cnt = epoll_wait(efd, p_ee, EPOLL_SIZE, timer);
 
 		now = time(NULL);
@@ -181,7 +182,8 @@ static int32_t work_process_cycle()
 					//加入读事件队列
 					io_task_queue.push(task);
 				}
-				else if(events | EPOLLOUT)
+				
+				if(events | EPOLLOUT)
 				{
 					//加入写事件队列
 					io_task_queue.push(task);
