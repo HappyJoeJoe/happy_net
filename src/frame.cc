@@ -24,7 +24,7 @@ using namespace std;
 
 #define CPU_NUM 		4
 #define PORT 			8888
-#define EPOLL_SIZE 		10240
+#define EPOLL_SIZE 		1024
 #define LISTEN_SIZE 	1024
 #define IP 				"127.0.0.1"
 
@@ -41,6 +41,7 @@ typedef struct cycle_s 			cycle_t;
 typedef int (*event_handler)(connection_t *);
 
 int32_t process;
+int lfd;
 
 struct event_s
 {
@@ -216,6 +217,7 @@ static uint64_t get_curr_msec()
 static int32_t work_process_cycle()
 {
 	int ret = 0;
+	int cnt = 0;
 	uint64_t timer = -1;
 
 	cycle_s cycle;
@@ -228,22 +230,6 @@ static int32_t work_process_cycle()
 	printf("work process id:%d\n", id);
 	//todo 子进程搞事情
 	int efd = epoll_create1(0);
-
-	int lfd = socket(AF_INET, SOCK_STREAM, 0);
-
-   	struct sockaddr_in addr;
-   	addr.sin_family 		= AF_INET;
-	addr.sin_port 			= htons(PORT);
-	addr.sin_addr.s_addr   	= inet_addr(IP);
-	bzero(&(addr.sin_zero), 8);
-	bind(lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
-
-	ret = listen(lfd, LISTEN_SIZE);
-	if(0 != ret)
-	{
-		printf("listen lfd failed\n");
-		exit(ret);
-	}
 
 	cycle.lfd = lfd;
 	cycle.efd = efd;
@@ -270,10 +256,7 @@ static int32_t work_process_cycle()
 		
 	}
 
-	printf("listen lfd sucess, lfd:[%d], ret:[%d]\n", lfd, ret);
-
-	vector<struct epoll_event> ee_vec;
-	ee_vec.reserve(EPOLL_SIZE);
+	vector<struct epoll_event> ee_vec(EPOLL_SIZE);
 
 	uint64_t now = get_curr_msec();
 
@@ -317,9 +300,14 @@ static int32_t work_process_cycle()
 		io_task_queue.clear();
 
 		// -------------- epoll_wait --------------
-		int cnt = epoll_wait(efd, &*(ee_vec.begin()), ee_vec.size(), timer);
+		cnt = epoll_wait(efd, &*(ee_vec.begin()), ee_vec.size(), timer);
 
 		now = time(NULL);
+
+		if(cnt == ee_vec.size())
+		{
+			ee_vec.resize(ee_vec.size() * 2);
+		}
 
 		for (int i = 0; i < cnt; ++i)
 		{
@@ -353,6 +341,8 @@ static int32_t master_process_cycle()
 {
 	pid_t id = gettid();
 	printf("master process id:%d\n", id);
+	close(lfd);
+	printf("master close lfd\n");
 	//todo master搞事情
 	while(1)
 	{
@@ -364,6 +354,31 @@ static int32_t master_process_cycle()
 
 static int32_t Init()
 {
+	pid_t id = gettid();
+	lfd = socket(AF_INET, SOCK_STREAM, 0);
+
+	struct sockaddr_in addr;
+   	addr.sin_family 		= AF_INET;
+	addr.sin_port 			= htons(PORT);
+	addr.sin_addr.s_addr   	= inet_addr(IP);
+	bzero(&(addr.sin_zero), 8);
+	int ret = bind(lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
+	if(0 != ret)
+	{
+		printf("process[%d] bind lfd[%d] failed\n", id, lfd);
+		exit(ret);
+	}
+
+	printf("process[%d] bind lfd[%d] sucess\n", id, lfd);
+
+	ret = listen(lfd, LISTEN_SIZE);
+	if(0 != ret)
+	{
+		printf("process[%d] listen lfd[%d] failed\n", id, lfd);
+		exit(ret);
+	}
+
+	printf("process[%d] listen lfd[%d] sucess\n", id, lfd);
 	return 0;
 }
 
