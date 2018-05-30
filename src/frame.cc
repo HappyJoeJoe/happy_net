@@ -282,26 +282,26 @@ static int32_t work_process_cycle()
 		timer_queue_t::iterator timer_end = timer_queue.lower_bound(now);
 		if(now >= timer_end->first)
 		{
-			for_each(timer_queue.begin(), timer_end, [& timer_task_queue](timer_queue_t::iterator it)
+			for_each(timer_queue.begin(), timer_end, [& timer_task_queue](pair<const uint64_t, list<task_t>>& p)
 			{
-				timer_task_queue.merge(it->second);
+				timer_task_queue.splice(timer_task_queue.end(), p.second);
 			});
 			
 			timer_queue.erase(timer_queue.begin(), timer_end);
 		}
 
 		// -------------- 定时器事件 --------------
-		for_each(timer_task_queue.begin(), timer_task_queue.end(), [](timer_task_queue_t::iterator it) 
+		for_each(timer_task_queue.begin(), timer_task_queue.end(), [](task_t& t) 
 		{
-			((event_handler)it->handler)((connection_t *)it->arg);
+			((event_handler)t.handler)((connection_t *)t.arg);
 		});
 
 		timer_task_queue.clear();
 
 		if(!timer_queue.size())
 		{
-			// timer_queue_t::iterator timer_end = timer_queue.lower_bound(now);
-			// timer = timer_end->first - now;
+			timer_queue_t::iterator it = timer_queue.begin();
+			timer = it->first - now;
 		}
 		else
 		{
@@ -309,9 +309,9 @@ static int32_t work_process_cycle()
 		}
 
 		// -------------- 网络 I/O 的读写事件 --------------
-		for_each(io_task_queue.begin(), io_task_queue.end(), [](io_task_queue_t::iterator it) 
+		for_each(io_task_queue.begin(), io_task_queue.end(), [](task_t& t) 
 		{
-			((event_handler)it->handler)((connection_t *)it->arg);
+			((event_handler)t.handler)((connection_t *)t.arg);
 		});
 
 		io_task_queue.clear();
