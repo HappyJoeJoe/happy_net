@@ -22,11 +22,12 @@
 
 using namespace std;
 
-#define CPU_NUM 		4
+#define CPU_NUM 		1
 #define PORT 			8888
 #define EPOLL_SIZE 		1024
 #define LISTEN_SIZE 	1024
-#define IP 				"127.0.0.1"
+// #define IP 				"172.18.185.251"
+#define IP 				"0.0.0.0"
 
 // #define gettid() syscall(SYS_gettid)  
 
@@ -112,40 +113,46 @@ int set_fd_noblock_and_cloexec(int fd)
 int read_handler(connection_t* c);
 int write_handler(connection_t* c);
 
-int accept_handler(connection_t* c)
+int empty_handler(connection_t* c)
+{
+	return 0;
+}
+
+int accept_handler(connection_t* lc)
 {
 	//如果是监听事件，优先处理
-	cycle_t* cycle = c->cycle;
-	event_t* p_rev = &c->rev;
-	int lfd = c->fd;
-	int efd = cycle->efd;
+	cycle_t* cycle = lc->cycle;
+	event_t* p_rev = &lc->rev;
+	// int lfd 	   = lc->fd;
+	int efd 	   = cycle->efd;
 
 	struct sockaddr_in ca;    
 	socklen_t len = sizeof(ca);
 
 	int fd = 0;
-	while((fd = accept(lfd, (sockaddr *)&ca, &len)) != 0)
+	while((fd = accept(lfd, (sockaddr *)&ca, &len)) > 0)
 	{
 		int ret = set_fd_noblock_and_cloexec(fd);
 		if(0 != ret)
 		{
-			
+			printf("set_fd_noblock_and_cloexec failed, fd[%d]\n", fd);
+			close(fd);
+			continue;
 		}
 
 		connection_t* p_conn = new connection_t();
-		p_conn->fd = fd;
-		p_conn->rev.handler = read_handler;
-		p_conn->rev.arg = p_conn;
+		p_conn->fd 			 = fd;
+		p_conn->rev.handler  = read_handler;
+		p_conn->rev.arg 	 = p_conn;
+		p_conn->wev.handler  = write_handler;
+		p_conn->wev.arg 	 = p_conn;
 
-		p_conn->wev.handler = write_handler;
-		p_conn->wev.arg = p_conn;
-
-		p_conn->cycle = c->cycle;
+		p_conn->cycle = lc->cycle;
 
 		struct epoll_event ee = 
 		{
-			EPOLLIN | EPOLLRDHUP | EPOLLOUT,
-			p_conn
+			EPOLLIN | EPOLLOUT | EPOLLET | EPOLLRDHUP,
+			(void *)p_conn
 		};
 
 		ret = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ee);
@@ -153,13 +160,19 @@ int accept_handler(connection_t* c)
 		{
 			
 		}
+
+		printf("efd[%d] accept fd[%d] sucess\n", efd, fd);
 	}
+
+	printf("accept_handler complete\n");
 
 	return 0;
 }
 
 int read_handler(connection_t* c)
 {
+	// printf("read_handler\n");
+
 	event_t* p_rev = &c->rev;
 	int fd = c->fd;
 	char* buf = p_rev->buf;
@@ -167,8 +180,12 @@ int read_handler(connection_t* c)
 	int ret = 0;
 	int num = 0;
 
-	while((ret = read(fd, buf, size_buf)) != EAGAIN) 
+	while((ret = read(fd, buf, size_buf)) >= 0 || ret == EAGAIN) 
 	{
+		if(ret == EAGAIN)
+		{
+			continue;
+		}
 		num += ret;
 		printf("read buf:[%s]\n", buf);
 	}
@@ -178,6 +195,8 @@ int read_handler(connection_t* c)
 
 int write_handler(connection_t* c)
 {
+	// printf("write_handler\n");
+
 	event_t* p_wev = &c->wev;
 	int fd = c->fd;
 	char* buf = p_wev->buf;
@@ -185,11 +204,16 @@ int write_handler(connection_t* c)
 	int ret = 0;
 	int num = 0;
 
-	while((ret = write(fd, buf, size_buf)) != EAGAIN) 
-	{
-		num += ret;
-		printf("write buf:[%s]\n", buf);
-	}
+	memcpy(buf, "bye", 3);
+
+	// while((ret = write(fd, buf, 3)) != EAGAIN) 
+	// {
+	// 	num += ret;
+	// 	printf("write buf:[%s]\n", buf);
+	// }
+
+	ret = write(fd, buf, size_buf);
+	printf("write buf:[%s]\n", buf);
 
 	return num;
 }
@@ -218,7 +242,7 @@ static int32_t work_process_cycle()
 {
 	int ret = 0;
 	int cnt = 0;
-	uint64_t timer = -1;
+	int64_t timer = -1;
 
 	cycle_s cycle;
 	
@@ -229,9 +253,9 @@ static int32_t work_process_cycle()
 	pid_t id = gettid();
 	printf("work process id:%d\n", id);
 	//todo 子进程搞事情
-	int efd = epoll_create1(0);
+	int efd = epoll_create(1024);
 
-	cycle.lfd = lfd;
+	// cycle.lfd = lfd;
 	cycle.efd = efd;
 
 	connection_t* p_conn = new connection_t();
@@ -239,7 +263,7 @@ static int32_t work_process_cycle()
 	p_conn->rev.handler = accept_handler;
 	p_conn->rev.arg = p_conn;
 
-	p_conn->wev.handler = NULL;
+	p_conn->wev.handler = empty_handler;
 	p_conn->wev.arg = NULL;
 
 	p_conn->cycle = &cycle;
@@ -247,7 +271,7 @@ static int32_t work_process_cycle()
 	struct epoll_event ee = 
 	{
 		EPOLLIN,
-		p_conn
+		(void *)p_conn
 	};
 
 	ret = epoll_ctl(efd, EPOLL_CTL_ADD, lfd, &ee);
@@ -281,7 +305,7 @@ static int32_t work_process_cycle()
 
 		timer_task_queue.clear();
 
-		if(!timer_queue.size())
+		if(timer_queue.size() > 0)
 		{
 			timer_queue_t::iterator it = timer_queue.begin();
 			timer = it->first - now;
@@ -294,6 +318,7 @@ static int32_t work_process_cycle()
 		// -------------- 网络 I/O 的读写事件 --------------
 		for_each(io_task_queue.begin(), io_task_queue.end(), [](task_t& t) 
 		{
+			// printf("doing io task\n");
 			((event_handler)t.handler)((connection_t *)t.arg);
 		});
 
@@ -301,6 +326,10 @@ static int32_t work_process_cycle()
 
 		// -------------- epoll_wait --------------
 		cnt = epoll_wait(efd, &*(ee_vec.begin()), ee_vec.size(), timer);
+
+		printf("epoll cnt[%d]\n", cnt);
+
+		printf("\n");
 
 		now = time(NULL);
 
@@ -315,22 +344,36 @@ static int32_t work_process_cycle()
 			uint32_t events 		= ee->events;
 			connection_t* c 		= (connection_t *)ee->data.ptr;
 
-			if(events | EPOLLIN | EPOLLRDHUP)
+			if(events & EPOLLRDHUP)
+			{
+				ret = epoll_ctl(efd, EPOLL_CTL_DEL, c->fd, ee);
+				if(0 != ret)
+				{
+					printf("epoll_ctl del err, fd[%d], ret[%d]\n", c->fd, ret);
+				}
+				close(c->fd);
+				printf("cli fd[%d] EPOLLRDHUP\n", c->fd);
+				continue;
+			}
+
+			if(events & EPOLLIN)
 			{
 				//加入读事件队列
 				task_t task;
 				task.handler = (void *)c->rev.handler;
 				task.arg = (void *)c;
 				io_task_queue.push_back(task);
+				printf("add read event sucess\n");
 			}
 			
-			if(events | EPOLLOUT)
+			if(events & EPOLLOUT)
 			{
 				//加入写事件队列
 				task_t task;
 				task.handler = (void *)c->wev.handler;
 				task.arg = (void *)c;
 				io_task_queue.push_back(task);
+				printf("add write event sucess\n");
 			}
 		}
 	}
@@ -341,13 +384,13 @@ static int32_t master_process_cycle()
 {
 	pid_t id = gettid();
 	printf("master process id:%d\n", id);
-	close(lfd);
-	printf("master close lfd\n");
+	// close(lfd);
+	// printf("master close lfd\n");
 	//todo master搞事情
 	while(1)
 	{
 		sleep(3);
-		printf("master_process_cycle %d\n", id);
+		// printf("master_process_cycle %d\n", id);
 	}
 	return 0;
 }
@@ -355,14 +398,26 @@ static int32_t master_process_cycle()
 static int32_t Init()
 {
 	pid_t id = gettid();
+
 	lfd = socket(AF_INET, SOCK_STREAM, 0);
 
+	int ret = set_fd_noblock(lfd);
+	if(0 != ret)
+	{
+		printf("set lfd[%d] failed\n", lfd);
+	}
+
+
 	struct sockaddr_in addr;
+
+	bzero(&(addr.sin_zero), 8);
+
    	addr.sin_family 		= AF_INET;
 	addr.sin_port 			= htons(PORT);
-	addr.sin_addr.s_addr   	= inet_addr(IP);
-	bzero(&(addr.sin_zero), 8);
-	int ret = bind(lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
+	// addr.sin_addr.s_addr   	= inet_addr(IP);
+	addr.sin_addr.s_addr   	= INADDR_ANY;
+	
+	ret = bind(lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
 	if(0 != ret)
 	{
 		printf("process[%d] bind lfd[%d] failed\n", id, lfd);
