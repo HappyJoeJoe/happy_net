@@ -10,6 +10,7 @@
 #include <endian.h>
 #include <fcntl.h>
 #include <sys/time.h>
+#include <stdlib.h>
 
 #define PORT 			8888
 #define IP 				"172.18.185.251"
@@ -32,13 +33,44 @@ int main(int argc, char const *argv[])
 
 	while(1)
 	{
-		sleep(3);
 		char buf[12] = "hello world";
 		ret = write(fd, buf, 12);
 		char tmp[128] = {0};
-		ret = read(fd, tmp, sizeof(tmp));
-		printf("read tmp[%s]\n", tmp);
+		if((ret = read(fd, tmp, sizeof(tmp))) > 0)
+		{
+			printf("read tmp[%s]\n", tmp);	
+		}
+		sleep(3);
 	}
+
+	// int efd = epoll_create(1024);
+	// struct epoll_event* p_ee = (struct epoll_event *)malloc(sizeof(struct epoll_event) * 1024);
+
+	// struct epoll_event ee = 
+	// {
+	// 	EPOLLOUT,
+	// 	(void *)0
+	// };
+
+	// ret = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ee);
+
+	// char buf[12] = "hello world";
+	// ret = write(fd, buf, sizeof(buf));
+
+	// while(1)
+	// {
+	// 	int cnt = epoll_wait(efd, p_ee, 1024, -1);
+	// 	for (int i = 0; i < cnt; ++i)
+	// 	{
+	// 		struct epoll_event* e = &p_ee[i];
+	// 		char tmp[128] = {0};
+	// 		ret = read(fd, tmp, sizeof(tmp));
+	// 	 	printf("read tmp[%s]\n", tmp);
+
+	// 	 	char buf[12] = "hello world";
+	// 		ret = write(fd, buf, sizeof(buf));
+	// 	}
+	// }
 
 	return 0;
 }
