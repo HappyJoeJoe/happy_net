@@ -382,7 +382,7 @@ static int32_t work_process_cycle()
 			timer_queue.erase(timer_queue.begin(), timer_end);
 		}
 
-		// -------------- 定时器事件 --------------
+		/* -------------- 定时器事件 -------------- */
 		for_each(timer_task_queue.begin(), timer_task_queue.end(), [](task_t& t) 
 		{
 			((event_handler)t.handler)((connection_t *)t.arg);
@@ -400,17 +400,16 @@ static int32_t work_process_cycle()
 			timer = -1;
 		}
 
-		// -------------- 网络 I/O 的读写事件 --------------
+		/* -------------- 网络 I/O 的读写事件 -------------- */
 		for_each(io_task_queue.begin(), io_task_queue.end(), [](task_t& t) 
 		{
-			// printf("doing io task\n");
 			((event_handler)t.handler)((connection_t *)t.arg);
 		});
 
 		io_task_queue.clear();
 
 		printf("\n");
-		// -------------- epoll_wait --------------
+		/* -------------- epoll_wait -------------- */
 		cnt = epoll_wait(efd, &*(ee_vec.begin()), ee_vec.size(), timer);
 
 		printf("epoll cnt[%d]\n", cnt);
@@ -451,7 +450,6 @@ static int32_t work_process_cycle()
 				task.handler = (void *)c->rev.handler;
 				task.arg = (void *)c;
 				io_task_queue.push_back(task);
-				// printf("add read event sucess\n");
 			}
 			
 			if(events & EPOLLOUT)
@@ -462,7 +460,6 @@ static int32_t work_process_cycle()
 				task.handler = (void *)c->wev.handler;
 				task.arg = (void *)c;
 				io_task_queue.push_back(task);
-				// printf("add write event sucess\n");
 			}
 		}
 	}
