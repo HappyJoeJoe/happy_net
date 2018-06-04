@@ -33,18 +33,18 @@ int main(int argc, char const *argv[])
 
 
 	// for(int i = 0; i < 1; i++)
-	while(1)
+	// while(1)
 	{
 		char buf[128] = "hello world,hello world,hello world,hello world,hello world";
 		ret = write(fd, buf, sizeof(buf));
-		char tmp[128] = {0};
 
+		sleep(3);
+
+		char tmp[128] = {0};
 		if((ret = read(fd, tmp, sizeof(tmp))) > 0)
 		{
 			printf("read tmp[%s]\n", tmp);	
 		}
-		
-		sleep(3);
 	}
 
 	close(fd);
