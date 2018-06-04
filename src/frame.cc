@@ -221,14 +221,15 @@ int read_handler(connection_t* c)
 {
 	event_t* p_rev = &c->rev;
 	int fd = c->fd;
-	char* buf = p_rev->buf;
-	size_t size_buf = 1024;
+	// char* buf = p_rev->buf;
+	char buf[1024] = {0};
+	size_t size_buf = 12;
 	int ret = 0;
 	int num = 0;
 
 	while(1) 
 	{
-		ret = recv(fd, buf, size_buf, 0);
+		ret = recv(fd, buf, 1024, 0);
 		if(ret > 0)
 		{
 			printf("recv[%d] buf:[%s] size:[%d]\n", fd, buf, ret);
@@ -246,14 +247,22 @@ int read_handler(connection_t* c)
 		}
 	}
 
-	ret = send(fd, "bye~", 4, 0);
+	num = ret;
+
+	ret = send(fd, buf, size_buf, 0);
 	if(ret > 0)
 	{
-		printf("send[%d] buf:[%s]\n", fd, "bye~");
+		printf("send[%d] buf:[%s], ret:[%d]\n", fd, buf, ret);
 	}
 
-	c->wev.handler = empty_handler;
-	c->end = 1;
+	if(ret < num)
+	{
+		ret = errno;
+		printf("EAGAIN:[%d], ret:[%d]\n", EAGAIN, ret);
+		update(c, READ_EVENT);
+		c->wev.handler = write_handler;
+		return ret;
+	}
 
 	return num;
 }
@@ -266,11 +275,6 @@ int write_handler(connection_t* c)
 	size_t size_buf = 1024;
 	int ret = 0;
 	int num = 0;
-
-	if(c->end)
-	{
-		return 0;
-	}
 
 	memcpy(buf, "bye", 3);
 
