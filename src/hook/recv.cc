@@ -1,5 +1,7 @@
 #include "recv.h"
 
+sys_recv = (sys_read_t)dlsym(RTLD_NEXT, "recv");
+
 ssize_t recv(int fd, void *buf, size_t count);
 {
 	if(sys_recv == 0)

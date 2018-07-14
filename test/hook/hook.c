@@ -32,8 +32,12 @@ void *malloc(size_t size)
 
 int main()
 {
+	double d;
+	d = 1.0;
+	/*
 	int* p = malloc(sizeof(int));
 	*p = 4;
 	free(p);
+	*/
 	return 0;
 }

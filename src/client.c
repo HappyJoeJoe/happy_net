@@ -14,6 +14,7 @@
 
 #define PORT 			8888
 #define IP 				"172.18.185.251"
+#define CLRF			\r\n
 
 
 int main(int argc, char const *argv[])
@@ -32,18 +33,19 @@ int main(int argc, char const *argv[])
 	}
 
 
-	// for(int i = 0; i < 1; i++)
-	// while(1)
+	for(int i = 0; i < 1; i++)
+	while(1)
 	{
-		char buf[128] = "hello world,hello world,hello world,hello world,hello world";
+		char buf[128] = "GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n";
 		ret = write(fd, buf, sizeof(buf));
+		printf("write buf[%s]\n", buf);
 
 		sleep(3);
 
 		char tmp[128] = {0};
 		if((ret = read(fd, tmp, sizeof(tmp))) > 0)
 		{
-			printf("read tmp[%s]\n", tmp);	
+			printf("read tmp[%s]\n", tmp);
 		}
 	}
 
@@ -54,14 +56,14 @@ int main(int argc, char const *argv[])
 
 	// struct epoll_event ee = 
 	// {
-	// 	EPOLLOUT,
-	// 	(void *)0
+	// 	EPOLLIN,
+	// 	STDIN_FILENO
 	// };
 
-	// ret = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ee);
+	// ret = epoll_ctl(efd, EPOLL_CTL_ADD, STDIN_FILENO, &ee);
 
-	// char buf[12] = "hello world";
-	// ret = write(fd, buf, sizeof(buf));
+	
+	// // ret = write(fd, buf, sizeof(buf));
 
 	// while(1)
 	// {
@@ -69,12 +71,18 @@ int main(int argc, char const *argv[])
 	// 	for (int i = 0; i < cnt; ++i)
 	// 	{
 	// 		struct epoll_event* e = &p_ee[i];
-	// 		char tmp[128] = {0};
-	// 		ret = read(fd, tmp, sizeof(tmp));
-	// 	 	printf("read tmp[%s]\n", tmp);
+	// 		if(e->data.fd = STDIN_FILENO)
+	// 		{
+	// 			char buf[128] = {0};
+	// 			ret = read(STDIN_FILENO, buf, sizeof(buf));
+	// 			printf("读入[%s]\n", buf);
+	// 			ret = write(fd, buf, sizeof(buf));
+	// 		}
+	// 		// char tmp[128] = {0};
+	// 		// ret = read(fd, tmp, sizeof(tmp));
+	// 	 // 	printf("read tmp[%s]\n", tmp);
 
-	// 	 	char buf[12] = "hello world";
-	// 		ret = write(fd, buf, sizeof(buf));
+			
 	// 	}
 	// }
 

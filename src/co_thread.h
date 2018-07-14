@@ -1,3 +1,12 @@
+/**********************************
+ *@项目名称: 协程库
+ *@文件名称: co_thread.h
+ *@Date 2018-05-16 18:00:00
+ *@Author jiabo.zhou
+ *@Copyright（C）: 2014-2018 fancy Inc.   All rights reserved.
+ *注意：
+***************************************/
+
 #ifndef __CO_THREAD_H__
 #define __CO_THREAD_H__
 

@@ -178,7 +178,6 @@ int accept_handler(connection_t* lc)
 	int ret = 0;
 	cycle_t* cycle = lc->cycle;
 	event_t* p_rev = &lc->rev;
-	// int lfd 	   = lc->fd;
 	int efd 	   = cycle->efd;
 
 	struct sockaddr_in ca;    
@@ -209,36 +208,38 @@ int accept_handler(connection_t* lc)
 			
 		}
 		
-		printf("lfd[%d] accept fd[%d] sucess\n", lfd, fd);
+		// printf("lfd[%d] accept fd[%d] sucess\n", lfd, fd);
 	}
 
-	printf("accept_handler complete\n");
+	// printf("accept_handler complete\n");
 
 	return 0;
 }
 
 int read_handler(connection_t* c)
 {
+	cycle_t* cycle = c->cycle;
+	int efd 	   = cycle->efd;
+
 	event_t* p_rev = &c->rev;
 	int fd = c->fd;
-	char buf[1024] = {0};
-	size_t size_buf = 12;
+	char buf[128] = {0};
 	int ret = 0;
 	int num = 0;
 
 	while(1) 
 	{
-		ret = recv(fd, buf, 1024, 0);
+		ret = recv(fd, buf, 128, 0);
 		if(ret > 0)
 		{
 			num += ret;
-			printf("recv[%d] buf:[%s] size:[%d]\n", fd, buf, ret);
+			// printf("recv fd:[%d] buf:[%s] size:[%d]\n", fd, buf, ret);
 			// return ret;
 			break;
 		}
 		if(ret == 0)
 		{
-			printf("eof\n");
+			// printf("eof\n");
 			return 0;
 		}
 		if(errno == EAGAIN | errno == EWOULDBLOCK)
@@ -247,12 +248,18 @@ int read_handler(connection_t* c)
 		}
 	}
 
-	ret = send(fd, buf, 12, 0);
-	if(ret > 0)
+	ret = send(fd, buf, num, 0);
+	if(ret == num)
 	{
-		char tmp[16] = {0};
-		memcpy(tmp, buf, ret);
-		printf("send[%d] buf:[%s], ret:[%d]\n", fd, tmp, ret);
+		// printf("send fd:[%d] buf:[%s], ret:[%d]\n", fd, buf, ret);
+
+		struct epoll_event ee;
+		ee.events = 0;
+		ee.data.ptr = NULL;
+		ret = epoll_ctl(efd, EPOLL_CTL_DEL, fd, &ee);
+
+		close(fd);
+		return ret;
 	}
 
 	if(ret < num)
@@ -273,7 +280,7 @@ int write_handler(connection_t* c)
 	event_t* p_wev = &c->wev;
 	int fd = c->fd;
 	char* buf = p_wev->buf;
-	size_t size_buf = 1024;
+	size_t size_buf = 128;
 	int ret = 0;
 	int num = 0;
 
@@ -411,11 +418,11 @@ static int32_t work_process_cycle()
 
 		io_task_queue.clear();
 
-		printf("\n");
+		// printf("\n");
 		/* -------------- epoll_wait -------------- */
 		cnt = epoll_wait(efd, &*(ee_vec.begin()), ee_vec.size(), timer);
 
-		printf("epoll cnt[%d]\n", cnt);
+		// printf("epoll cnt[%d]\n", cnt);
 
 		now = time(NULL);
 
@@ -429,9 +436,10 @@ static int32_t work_process_cycle()
 			struct epoll_event* ee 	= &ee_vec[i];
 			uint32_t events 		= ee->events;
 			connection_t* c 		= (connection_t *)ee->data.ptr;
+			int fd 					= c->fd;
 
-			printf("fd[%d] events[%d], events & EPOLLIN:[%d], events & EPOLLOUT:[%d], events & EPOLLRDHUP:[%d]\n", 
-				c->fd, events, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
+			// printf("fd[%d] events[%d], events & EPOLLIN:[%d], events & EPOLLOUT:[%d], events & EPOLLRDHUP:[%d]\n", 
+				// c->fd, events, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
 
 			if(events & EPOLLRDHUP)
 			{
@@ -441,23 +449,31 @@ static int32_t work_process_cycle()
 					printf("epoll_ctl del err, fd[%d], ret[%d]\n", c->fd, ret);
 				}
 				close(c->fd);
-				printf("客户端fd:[%d] 断联\n", c->fd);
+				// printf("客户端fd:[%d] 断联\n", c->fd);
 				continue;
 			}
 
 			if(events & EPOLLIN)
 			{
-				printf("读事件\n");
-				//加入读事件队列
+				// printf("读事件\n");
 				task_t task;
 				task.handler = (void *)c->rev.handler;
 				task.arg = (void *)c;
-				io_task_queue.push_back(task);
+
+				if(fd = lfd)
+				{
+					((event_handler)task.handler)((connection_t *)task.arg);
+				}
+				else
+				{
+					//加入读事件队列
+					io_task_queue.push_back(task);	
+				}
 			}
 			
 			if(events & EPOLLOUT)
 			{
-				printf("写事件\n");
+				// printf("写事件\n");
 				//加入写事件队列
 				task_t task;
 				task.handler = (void *)c->wev.handler;
