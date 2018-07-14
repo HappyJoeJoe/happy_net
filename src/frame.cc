@@ -328,9 +328,28 @@ static uint64_t get_curr_msec()
 		return -1;
 	}
 
-    msec = tv.tv_sec + tv.tv_usec / 1000;
+    msec = tv.tv_sec * 1000 + tv.tv_usec / 1000;
 
 	return msec;
+}
+
+void timer_func(void* arg)
+{
+	printf("fuck the life\n");
+
+	timer_queue_t& timer_queue = *static_cast<timer_queue_t*>(arg);
+	uint64_t now = get_curr_msec();
+	uint64_t three = now + 3000;
+
+	list<task_t> p;
+	task_t timer_task = {
+		(void *)timer_func,
+		&timer_queue
+	};
+
+	p.push_back(timer_task);
+
+	timer_queue[three] = p;
 }
 
 static int32_t work_process_cycle()
@@ -379,9 +398,22 @@ static int32_t work_process_cycle()
 
 	uint64_t now = get_curr_msec();
 
+	// uint64_t three = now + 3000;
+
+	// list<task_t> p;
+	// task_t timer_task = {
+	// 	(void *)timer_func,
+	// 	&timer_queue
+	// };
+
+	// p.push_back(timer_task);
+
+	// timer_queue[three] = p;
+
 	while(1)
 	{
 		timer_queue_t::iterator timer_end = timer_queue.lower_bound(now);
+		// printf("now:[%lu], next timer:[%lu]\n", now, timer_end->first);
 		if(now >= timer_end->first)
 		{
 			for_each(timer_queue.begin(), timer_end, [& timer_task_queue](pair<const uint64_t, list<task_t>>& p)
@@ -390,20 +422,21 @@ static int32_t work_process_cycle()
 			});
 			
 			timer_queue.erase(timer_queue.begin(), timer_end);
+
+			/* -------------- 定时器事件 -------------- */
+			for_each(timer_task_queue.begin(), timer_task_queue.end(), [](task_t& t) 
+			{
+				((event_handler)t.handler)((connection_t *)t.arg);
+			});
+
+			timer_task_queue.clear();
 		}
-
-		/* -------------- 定时器事件 -------------- */
-		for_each(timer_task_queue.begin(), timer_task_queue.end(), [](task_t& t) 
-		{
-			((event_handler)t.handler)((connection_t *)t.arg);
-		});
-
-		timer_task_queue.clear();
 
 		if(timer_queue.size() > 0)
 		{
-			timer_queue_t::iterator it = timer_queue.begin();
-			timer = it->first - now;
+			timer_end = timer_queue.lower_bound(now);
+			timer = timer_end->first - now;
+			printf("timer:[%lu]\n", timer);
 		}
 		else
 		{
@@ -424,7 +457,7 @@ static int32_t work_process_cycle()
 
 		// printf("epoll cnt[%d]\n", cnt);
 
-		now = time(NULL);
+		now = get_curr_msec();
 
 		if(cnt == ee_vec.size())
 		{
