@@ -416,6 +416,14 @@ static int32_t work_process_cycle()
 
 	while(1)
 	{
+		/* -------------- accept 事件 -------------- */
+		for_each(accept_task_queue.begin(), accept_task_queue.end(), [](task_t& t) 
+		{
+			((event_handler)t.handler)((connection_t *)t.arg);
+		});
+
+		accept_task_queue.clear();
+
 		timer_queue_t::iterator timer_end = timer_queue.lower_bound(now);
 		// printf("now:[%lu], next timer:[%lu]\n", now, timer_end->first);
 		if(now >= timer_end->first)
@@ -519,12 +527,7 @@ static int32_t work_process_cycle()
 				io_task_queue.push_back(task);
 			}
 
-			for_each(accept_task_queue.begin(), accept_task_queue.end(), [](task_t& t) 
-			{
-				((event_handler)t.handler)((connection_t *)t.arg);
-			});
-
-			accept_task_queue.clear();
+			
 
 		}
 	}
