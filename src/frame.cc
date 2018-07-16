@@ -162,6 +162,7 @@ void update(connection_t* c, int event_type)
 		}
 		else
 		{
+			// events = event_type | EPOLLIN | EPOLLRDHUP;
 			events = event_type | EPOLLIN | EPOLLET | EPOLLRDHUP;
 		}
 	}
@@ -315,6 +316,7 @@ int write_handler(connection_t* c)
 
 typedef list<task_t>		timer_task_queue_t;
 typedef list<task_t>		io_task_queue_t;
+typedef list<task_t>		accept_task_queue_t;
 typedef map<uint64_t, list<task_t>>	timer_queue_t;
 
 static uint64_t get_curr_msec()
@@ -360,9 +362,11 @@ static int32_t work_process_cycle()
 
 	cycle_s cycle;
 	
-	timer_task_queue_t 	timer_task_queue;
-	io_task_queue_t 	io_task_queue;
-	timer_queue_t 		timer_queue;
+	timer_task_queue_t 		timer_task_queue;
+	timer_queue_t 			timer_queue;
+	io_task_queue_t 		io_task_queue;
+	accept_task_queue_t 	accept_task_queue;
+
 
 	pid_t id = gettid();
 	printf("work process id:%d\n", id);
@@ -495,7 +499,8 @@ static int32_t work_process_cycle()
 
 				if(fd = lfd)
 				{
-					((event_handler)task.handler)((connection_t *)task.arg);
+					// ((event_handler)task.handler)((connection_t *)task.arg);
+					accept_task_queue.push_back(task);
 				}
 				else
 				{
@@ -513,6 +518,14 @@ static int32_t work_process_cycle()
 				task.arg = (void *)c;
 				io_task_queue.push_back(task);
 			}
+
+			for_each(accept_task_queue.begin(), accept_task_queue.end(), [](task_t& t) 
+			{
+				((event_handler)t.handler)((connection_t *)t.arg);
+			});
+
+			accept_task_queue.clear();
+
 		}
 	}
 	return 0;
