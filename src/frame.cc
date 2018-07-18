@@ -41,8 +41,10 @@ using namespace std;
 typedef struct task_s 			task_t;
 typedef struct event_s 			event_t;
 typedef struct connection_s 	connection_t;
+typedef struct request_s 		request_t;
 typedef struct cycle_s 			cycle_t;
 typedef int (*event_handler)(connection_t *);
+typedef int (*request_handler)(request_t *);
 
 int32_t process;
 int lfd;
@@ -52,16 +54,28 @@ struct event_s
 	event_handler handler;
 	void* arg;
 	char buf[1024];
+	int timer:1;	//是否设置了定时器
 };
 
 struct connection_s
 {
-	int fd;
-	int active;
-	int end;
-	event_t rev;
-	event_t wev;
+	int fd;			//套接字
+	
+	event_t rev;	//读事件
+	event_t wev;	//写事件
 	cycle_t* cycle;
+
+	int active:1; 	//链接是否已加入epoll队列中
+	int accept:1; 	//是否用于监听套接字
+	int ready:1;  	//第一次建立链接是否有开始数据，没有则不建立请求体
+
+};
+
+struct request_s
+{
+	connection_t* c;
+	request_handler read_handler;
+	request_handler write_handler;
 };
 
 struct task_s
@@ -202,19 +216,26 @@ int accept_handler(connection_t* lc)
 			(void *)p_conn
 		};
 
-		p_conn->active = 1;
-		ret = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ee);
-		if(0 != ret)
-		{
+		update(p_conn, READ_EVENT);
+		// p_conn->active = 1;
+		// ret = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ee);
+		// if(0 != ret)
+		// {
 			
-		}
+		// }
 		
+
 		// printf("lfd[%d] accept fd[%d] sucess\n", lfd, fd);
 	}
 
 	// printf("accept_handler complete\n");
 
 	return 0;
+}
+
+int wait_request()
+{
+
 }
 
 int read_handler(connection_t* c)
@@ -249,10 +270,15 @@ int read_handler(connection_t* c)
 		}
 	}
 
+	// const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
+	// int size = strlen(str);
+
+	// printf("size:[%d]\n", size);
+
 	ret = send(fd, buf, num, 0);
 	if(ret == num)
 	{
-		// printf("send fd:[%d] buf:[%s], ret:[%d]\n", fd, buf, ret);
+		// printf("send fd:[%d] buf:[%s], ret:[%d]\n", fd, str, ret);
 
 		struct epoll_event ee;
 		ee.events = 0;
@@ -260,6 +286,8 @@ int read_handler(connection_t* c)
 		ret = epoll_ctl(efd, EPOLL_CTL_DEL, fd, &ee);
 
 		close(fd);
+
+		delete c;
 		return ret;
 	}
 
@@ -385,6 +413,7 @@ static int32_t work_process_cycle()
 	p_conn->wev.arg = NULL;
 
 	p_conn->cycle = &cycle;
+	p_conn->accept = 1;
 
 	struct epoll_event ee = 
 	{
@@ -448,7 +477,7 @@ static int32_t work_process_cycle()
 		{
 			timer_end = timer_queue.lower_bound(now);
 			timer = timer_end->first - now;
-			printf("timer:[%lu]\n", timer);
+			// printf("timer:[%lu]\n", timer);
 		}
 		else
 		{
@@ -501,11 +530,17 @@ static int32_t work_process_cycle()
 			if(events & EPOLLIN)
 			{
 				// printf("读事件\n");
+				if(!c->ready)
+				{
+					c->ready = 1;
+				}
+
 				task_t task;
 				task.handler = (void *)c->rev.handler;
 				task.arg = (void *)c;
 
-				if(fd = lfd)
+				if(c->accept)
+				// if(fd == lfd)
 				{
 					// ((event_handler)task.handler)((connection_t *)task.arg);
 					accept_task_queue.push_back(task);
@@ -526,9 +561,6 @@ static int32_t work_process_cycle()
 				task.arg = (void *)c;
 				io_task_queue.push_back(task);
 			}
-
-			
-
 		}
 	}
 	return 0;
@@ -551,16 +583,32 @@ static int32_t master_process_cycle()
 
 static int32_t Init()
 {
+	int ret = 0;
+	int reuseaddr = 1;
 	pid_t id = gettid();
+
+	printf("AF_INET:[%d], SOCK_STREAM:[%d]\n", AF_INET, SOCK_STREAM);
 
 	lfd = socket(AF_INET, SOCK_STREAM, 0);
 
-	int ret = set_fd_noblock(lfd);
+	if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR,
+                   (const void *) &reuseaddr, sizeof(int))
+        == -1)
+    {
+        // if (ngx_close_socket(s) == -1) {
+        //     ngx_log_error(NGX_LOG_EMERG, log, ngx_socket_errno,
+        //                   ngx_close_socket_n " %V failed",
+        //                   &ls[i].addr_text);
+        // }
+
+        return -1;
+    }
+
+    ret = set_fd_noblock(lfd);
 	if(0 != ret)
 	{
 		printf("set lfd[%d] failed\n", lfd);
 	}
-
 
 	struct sockaddr_in addr;
 
