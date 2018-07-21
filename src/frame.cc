@@ -393,9 +393,6 @@ struct every_timer_arg
 void every_timer_func(void* arg)
 {
 	struct every_timer_arg* t_arg = static_cast<struct every_timer_arg*>(arg);
-	// struct every_timer_arg et_arg;
-	// memcpy(&et_arg, t_arg, sizeof(struct every_timer_arg));
-	// delete arg;
 
 	timer_func func = t_arg->func;
 	void* func_arg = t_arg->arg;
