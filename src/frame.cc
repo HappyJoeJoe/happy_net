@@ -26,7 +26,6 @@ using namespace std;
 #define PORT 			8888
 #define EPOLL_SIZE 		1024
 #define LISTEN_SIZE 	1024
-// #define IP 				"172.18.185.251"
 #define IP 				"0.0.0.0"
 
 #define READ_EVENT 		 EPOLLIN | EPOLLET | EPOLLRDHUP
@@ -45,6 +44,7 @@ typedef struct request_s 		request_t;
 typedef struct cycle_s 			cycle_t;
 typedef int (*event_handler)(connection_t *);
 typedef int (*request_handler)(request_t *);
+typedef void (*timer_func)(void *);
 
 int32_t process;
 int lfd;
@@ -363,23 +363,103 @@ static uint64_t get_curr_msec()
 	return msec;
 }
 
-void timer_func(void* arg)
-{
-	printf("fuck the life\n");
+// void timer_func(void* arg)
+// {
+// 	printf("fuck the life\n");
 
-	timer_queue_t& timer_queue = *static_cast<timer_queue_t*>(arg);
+// 	timer_queue_t& timer_queue = *static_cast<timer_queue_t*>(arg);
+// 	uint64_t now = get_curr_msec();
+// 	uint64_t three = now + 3000;
+
+// 	list<task_t> p;
+// 	task_t timer_task = {
+// 		(void *)timer_func,
+// 		&timer_queue
+// 	};
+
+// 	p.push_back(timer_task);
+
+// 	timer_queue[three] = p;
+// }
+
+struct every_timer_arg
+{
+	timer_func func;
+	void* arg;
+	void* ctx;
+	uint64_t every;
+};
+
+void every_timer_func(void* arg)
+{
+	struct every_timer_arg* t_arg = static_cast<struct every_timer_arg*>(arg);
+	// struct every_timer_arg et_arg;
+	// memcpy(&et_arg, t_arg, sizeof(struct every_timer_arg));
+	// delete arg;
+
+	timer_func func = t_arg->func;
+	void* func_arg = t_arg->arg;
+	((event_handler)func)((connection_t *)func_arg);
+
+	timer_queue_t& timer_queue = *static_cast<timer_queue_t*>(t_arg->ctx);
+	
 	uint64_t now = get_curr_msec();
-	uint64_t three = now + 3000;
+	uint64_t when = now + t_arg->every * 1000;
+
+	list<task_t> p;
+
+	task_t every_timer_task = {
+		(void *)every_timer_func,
+		(void *)t_arg
+	};
+
+	p.push_back(every_timer_task);
+
+	timer_queue[when] = p;
+}
+
+void add_timer_after(timer_queue_t& timer_queue, uint64_t after, timer_func func, void* arg)
+{
+	uint64_t now = get_curr_msec();
+	uint64_t when = now + after * 1000;
 
 	list<task_t> p;
 	task_t timer_task = {
-		(void *)timer_func,
-		&timer_queue
+		(void *)func,
+		(void *)arg
 	};
 
 	p.push_back(timer_task);
 
-	timer_queue[three] = p;
+	timer_queue[when] = p;
+}
+
+void add_every_timer(timer_queue_t& timer_queue, uint64_t after, uint64_t every, timer_func func, void* arg)
+{
+	uint64_t now = get_curr_msec();
+	uint64_t when = now + after * 1000;
+
+	list<task_t> p;
+
+	struct every_timer_arg* t_arg = (struct every_timer_arg*)malloc(sizeof(struct every_timer_arg));
+	t_arg->func = func;
+	t_arg->arg = arg;
+	t_arg->ctx = &timer_queue;
+	t_arg->every = every;
+
+	task_t every_timer_task = {
+		(void *)every_timer_func,
+		(void *)t_arg
+	};
+
+	p.push_back(every_timer_task);
+
+	timer_queue[when] = p;
+}
+
+void tmp_timer(void* arg)
+{
+	printf("fuck!!!!!!!!!!!\n");
 }
 
 static int32_t work_process_cycle()
@@ -431,17 +511,7 @@ static int32_t work_process_cycle()
 
 	uint64_t now = get_curr_msec();
 
-	// uint64_t three = now + 3000;
-
-	// list<task_t> p;
-	// task_t timer_task = {
-	// 	(void *)timer_func,
-	// 	&timer_queue
-	// };
-
-	// p.push_back(timer_task);
-
-	// timer_queue[three] = p;
+	add_every_timer(timer_queue, 3, 2, tmp_timer, NULL);
 
 	while(1)
 	{
