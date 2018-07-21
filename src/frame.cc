@@ -25,7 +25,7 @@ using namespace std;
 #define CPU_NUM 		1
 #define PORT 			8888
 #define EPOLL_SIZE 		1024
-#define LISTEN_SIZE 	128
+#define LISTEN_SIZE 	256
 #define IP 				"0.0.0.0"
 
 #define READ_EVENT 		 EPOLLIN | EPOLLET | EPOLLRDHUP
