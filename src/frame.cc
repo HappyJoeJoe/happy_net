@@ -25,7 +25,7 @@ using namespace std;
 #define CPU_NUM 		1
 #define PORT 			8888
 #define EPOLL_SIZE 		1024
-#define LISTEN_SIZE 	1024
+#define LISTEN_SIZE 	128
 #define IP 				"0.0.0.0"
 
 #define READ_EVENT 		 EPOLLIN | EPOLLET | EPOLLRDHUP
@@ -508,7 +508,7 @@ static int32_t work_process_cycle()
 
 	uint64_t now = get_curr_msec();
 
-	add_every_timer(timer_queue, 3, 2, tmp_timer, NULL);
+	// add_every_timer(timer_queue, 3, 2, tmp_timer, NULL);
 
 	while(1)
 	{
