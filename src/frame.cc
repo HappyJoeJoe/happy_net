@@ -68,7 +68,7 @@ struct connection_s
 	int active:1; 	//链接是否已加入epoll队列中
 	int accept:1; 	//是否用于监听套接字
 	int ready:1;  	//第一次建立链接是否有开始数据，没有则不建立请求体
-
+	
 };
 
 struct request_s
@@ -415,22 +415,6 @@ void every_timer_func(void* arg)
 	timer_queue[when] = p;
 }
 
-void add_timer_after(timer_queue_t& timer_queue, uint64_t after, timer_func func, void* arg)
-{
-	uint64_t now = get_curr_msec();
-	uint64_t when = now + after * 1000;
-
-	list<task_t> p;
-	task_t timer_task = {
-		(void *)func,
-		(void *)arg
-	};
-
-	p.push_back(timer_task);
-
-	timer_queue[when] = p;
-}
-
 void add_every_timer(timer_queue_t& timer_queue, uint64_t after, uint64_t every, timer_func func, void* arg)
 {
 	uint64_t now = get_curr_msec();
@@ -450,6 +434,22 @@ void add_every_timer(timer_queue_t& timer_queue, uint64_t after, uint64_t every,
 	};
 
 	p.push_back(every_timer_task);
+
+	timer_queue[when] = p;
+}
+
+void add_timer_after(timer_queue_t& timer_queue, uint64_t after, timer_func func, void* arg)
+{
+	uint64_t now = get_curr_msec();
+	uint64_t when = now + after * 1000;
+
+	list<task_t> p;
+	task_t timer_task = {
+		(void *)func,
+		(void *)arg
+	};
+
+	p.push_back(timer_task);
 
 	timer_queue[when] = p;
 }
