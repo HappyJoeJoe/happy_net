@@ -27,6 +27,7 @@ using namespace std;
 #define EPOLL_SIZE 		1024
 #define LISTEN_SIZE 	256
 #define IP 				"0.0.0.0"
+#define TIME_OUT 		3
 
 #define READ_EVENT 		 EPOLLIN | EPOLLET | EPOLLRDHUP
 #define WRITE_EVENT 	 EPOLLOUT
@@ -233,9 +234,10 @@ int accept_handler(connection_t* lc)
 	return 0;
 }
 
-int wait_request()
+/* 连接第一次创建时，设置的回调函数，因为第一次连接成功后，没有数据，则不初始化链接 */
+int init_request()
 {
-
+	
 }
 
 int read_handler(connection_t* c)
@@ -454,6 +456,11 @@ void add_timer_after(timer_queue_t& timer_queue, uint64_t after, timer_func func
 	timer_queue[when] = p;
 }
 
+int delete_timer()
+{
+
+}
+
 void tmp_timer(void* arg)
 {
 	printf("fuck!!!!!!!!!!!\n");
@@ -599,6 +606,7 @@ static int32_t work_process_cycle()
 				// printf("读事件\n");
 				if(!c->ready)
 				{
+
 					c->ready = 1;
 				}
 
