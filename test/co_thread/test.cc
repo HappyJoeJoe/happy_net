@@ -33,9 +33,27 @@ typedef struct test
 	
 }test;
 
+class A
+{
+public:
+	A()
+	{
+		printf("hello I'm A\n");
+	}
+	~A()
+	{
+		printf("hello I'm A~~\n");
+	};
+	
+};
+
+const int i = 20;
+
+const static int m = 20;
+
 int32_t main(int32_t argc, char* argv[])
 {
-	test* s = singleton<test>::get_instance();
+	// test* s = singleton<test>::get_instance();
 
 	int arg1 = 11;
 	int arg2 = 22;
@@ -43,8 +61,14 @@ int32_t main(int32_t argc, char* argv[])
 	co_2 = co_create(func2, &arg2);
 	co_resume(co_1);
 
-	co_release();
-	printf("main over\n");
-	
+	// co_release();
+	// printf("main over\n");
+
+	// const int j = 20;
+
+	// const static int n = 20;
+
+	// printf("sizeof(i):[%lu], sizeof(j):[%lu]\n", sizeof(i), sizeof(j));
+
 	return 0;
 }
