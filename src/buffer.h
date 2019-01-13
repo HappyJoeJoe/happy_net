@@ -1,5 +1,5 @@
-#ifndef __BUFFER_H__
-#define __BUFFER_H__
+#ifndef __VEC_BUFFER_H__
+#define __VEC_BUFFER_H__
 
 #include <vector>
 #include <assert.h>
@@ -17,21 +17,19 @@ public:
 	explicit buffer() : 
 		read_idx_(reserve_size), 
 		write_idx_(reserve_size), 
-		buf_(init_size) 
+		buf_(reserve_size + init_size) 
 	{
 
 	}
 
 	int readable_size()
 	{
-		assert(write_idx_ - read_idx_ > 0);
-		cout << "readable_size:[" << write_idx_ - read_idx_ << "]" << endl;
+		assert(write_idx_ - read_idx_ >= 0);
 		return write_idx_ - read_idx_;
 	}
 
 	int writable_size()
 	{
-		cout << "writable_size:[" << buf_.size() - write_idx_ << "]" << endl;
 		return buf_.size() - write_idx_;
 	}
 
@@ -39,7 +37,7 @@ public:
 	int peek(T& t) 
 	{
 		size_t len = sizeof(T);
-		if(len < readable_size())
+		if(len <= readable_size())
 		{
 			copy(read_begin(),
 			     read_begin() + len,
@@ -51,9 +49,13 @@ public:
 		return -1;
 	}
 
+	/* 
+	 * params:
+	 * len: C式字符串，表示去掉截止符'\0'
+	 */
 	int peek_string(size_t len, char* ptr)
 	{
-		if(len + 1 < readable_size())
+		if(len + 1 <= readable_size())
 		{
 			copy(read_begin(),
 			     read_begin() + len,
@@ -77,7 +79,6 @@ public:
 
 			read_idx_ += len;
 
-			cout << "read_idx_:[" << read_idx_ << "] write_idx_:[" << write_idx_ << "]" << endl;;
 			return len;
 		}
 
@@ -104,10 +105,9 @@ public:
 	}
 
 	template<typename T>
-	int append(T& t)
+	int append(const T& t)
 	{
 		size_t len = sizeof(T);
-		cout << "size T:[" << len << "]" << endl;
 		if(len > writable_size())
 		{
 			make_space(len);
@@ -134,6 +134,7 @@ public:
 			 ptr + len + 1,
 			 write_begin());
 
+
 		write_idx_ += (len + 1);
 
 		return len;
@@ -151,36 +152,35 @@ public:
 
 	int read_fd(int fd);
 
+	int write_fd(int fd);
+
 private:
 	int make_space(size_t len)
 	{
 		assert(read_idx_ >= reserve_size);
 
+		// cout << "reserve_size:[" << reserve_size << "] "
+		//      << "read_idx_:[" << read_idx_ << "] "
+		//      << "write_idx_:[" << write_idx_ << "] "
+		//      << "buf_.size:[" << buf_.size() << "] "
+		//      << "len:[" << len << "] "
+		//      << endl;
+
 		if(read_idx_ - reserve_size /* 已读区域 */
 			+ writable_size()       /* 可写其余 */
 			>= len)
 		{
-			int old_readable_size = readable_size();
+			int origin_readable_size = readable_size();
 			copy(read_begin(), 
-				 read_begin() + old_readable_size,
+				 read_begin() + origin_readable_size,
 				 &*buf_.begin() + reserve_size);
 
 			read_idx_ = reserve_size;
-			write_idx_ = read_idx_;
-
-			return len;
+			write_idx_ = read_idx_ + origin_readable_size;
 		}
 		else
 		{
-			int old_readable_size = readable_size();
-			vector<char> b;
-			b.resize(reserve_size + old_readable_size + len + init_size*2);
-			copy(read_begin(),
-				 read_begin() + old_readable_size,
-				 b.begin() + reserve_size);
-			buf_.swap(b);
-			read_idx_ = reserve_size;
-			write_idx_ = read_idx_ + old_readable_size;
+			buf_.resize(write_idx_ + len + init_size);
 		}
 
 		return len;
@@ -192,7 +192,7 @@ private:
 	int write_idx_;
 
 	const static int reserve_size = 8; //预留字段
-	const static int init_size = 1024; 
+	const static int init_size = 16; 
 
 	
 };
