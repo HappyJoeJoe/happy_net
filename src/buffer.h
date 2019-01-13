@@ -134,7 +134,6 @@ public:
 			 ptr + len + 1,
 			 write_begin());
 
-
 		write_idx_ += (len + 1);
 
 		return len;
@@ -154,21 +153,28 @@ public:
 
 	int write_fd(int fd);
 
+	void debug_info()
+	{
+		cout << "reserve_size:[" << reserve_size << "] "
+		     << "read_idx_:[" << read_idx_ << "] "
+		     << "write_idx_:[" << write_idx_ << "] "
+		     << "buf_.size:[" << buf_.size() << "] "
+		     << endl;
+	}
+
 private:
+
+	int has_read()
+	{
+		return read_idx_ - reserve_size;
+	}
+
 	int make_space(size_t len)
 	{
 		assert(read_idx_ >= reserve_size);
 
-		// cout << "reserve_size:[" << reserve_size << "] "
-		//      << "read_idx_:[" << read_idx_ << "] "
-		//      << "write_idx_:[" << write_idx_ << "] "
-		//      << "buf_.size:[" << buf_.size() << "] "
-		//      << "len:[" << len << "] "
-		//      << endl;
-
-		if(read_idx_ - reserve_size /* 已读区域 */
-			+ writable_size()       /* 可写其余 */
-			>= len)
+		/* 已读区域 + 待写区域 >= 待写入数据长度 */
+		if(has_read() + writable_size() >= len)
 		{
 			int origin_readable_size = readable_size();
 			copy(read_begin(), 
@@ -191,8 +197,8 @@ private:
 	int read_idx_;
 	int write_idx_;
 
-	const static int reserve_size = 8; //预留字段
-	const static int init_size = 16; 
+	const static int reserve_size = 8;   //预留字段
+	const static int init_size    = 512; //初始化buf大小
 
 	
 };

@@ -8,6 +8,7 @@ struct obj
 	int age;
 	char c;
 	long height;
+	char* ptr;
 };
 
 int main(int argc, char const *argv[])
@@ -16,6 +17,7 @@ int main(int argc, char const *argv[])
 	o.age = 20;
 	o.c = 'a';
 	o.height = 200000;
+	o.ptr = "hello world!";
 
 	const char* str = "I'm very happy";
 	size_t len = strlen(str);
@@ -26,9 +28,11 @@ int main(int argc, char const *argv[])
 
 	struct obj tmp;
 	b.get<struct obj>(tmp);
-	cout << "age:"    << tmp.age << " "
-	     << "str:"    << tmp.c   << " "
-	     << "height:" << tmp.height << endl;
+	cout << "age:"    << tmp.age    << " "
+	     << "str:"    << tmp.c      << " "
+	     << "height:" << tmp.height << " "
+	     << "ptr:"    << tmp.ptr    << " "
+	     << endl;
 
     char buf[len+1];
     b.get_string(len, buf);
