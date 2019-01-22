@@ -48,6 +48,8 @@ typedef int (*event_handler)(connection_t *);
 typedef int (*request_handler)(request_t *);
 typedef void (*timer_func)(void *);
 
+int read_example_handler(connection_t* c);
+
 int32_t process;
 int lfd;
 
@@ -226,7 +228,7 @@ int accept_handler(connection_t* lc)
 		connection_t* p_conn = new connection_t();
 		p_conn->fd 			 = fd;
 		// p_conn->rev.handler  = read_handler;
-		p_conn->rev.handler  = read_example_handler
+		p_conn->rev.handler  = read_example_handler;
 		p_conn->rev.arg 	 = p_conn;
 		p_conn->wev.handler  = write_handler;
 		p_conn->wev.arg 	 = p_conn;
@@ -396,6 +398,14 @@ int read_example_handler(connection_t* c)
 	return num;
 }
 
+int write_empty_handler(connection_t* c)
+{
+	printf("%s\n", "write_empty_handler");
+	return 0;
+}
+
+/* 执行用户请求后，开始对客户端写数据，若写不完，则开始对写事件设置write_handler 
+   如果写完以后，要置 write_handler 为 emtpy_handler，否则有可能写事件再次出发 */
 int write_handler(connection_t* c)
 {
 	event_t* p_wev = &c->wev;
@@ -436,7 +446,13 @@ int write_handler(connection_t* c)
 	    	return ret;
 	    }
 	}
+
+	c->wev.handler = write_empty_handler;
+
+	return ret;
 }
+
+
 
 typedef list<task_t>		timer_task_queue_t;
 typedef list<task_t>		io_task_queue_t;

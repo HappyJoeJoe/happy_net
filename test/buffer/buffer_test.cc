@@ -3,17 +3,17 @@
 
 using namespace std;
 
-struct obj
+typedef struct obj
 {
 	int age;
 	char c;
 	long height;
 	char* ptr;
-};
+} obj;
 
 int main(int argc, char const *argv[])
 {
-	struct obj o;
+	obj o;
 	o.age = 20;
 	o.c = 'a';
 	o.height = 200000;
@@ -23,11 +23,11 @@ int main(int argc, char const *argv[])
 	size_t len = strlen(str);
 
 	buffer b;
-	b.append<struct obj>(o);
+	b.append<obj>(o);
 	b.append_string(str);
 
-	struct obj tmp;
-	b.get<struct obj>(tmp);
+	obj tmp;
+	b.get<obj>(tmp);
 	cout << "age:"    << tmp.age    << " "
 	     << "str:"    << tmp.c      << " "
 	     << "height:" << tmp.height << " "
@@ -69,6 +69,7 @@ int main(int argc, char const *argv[])
     size_t len2 = strlen(str1);
     bb.append_string(str1);
 
+    //4 表示'e', 'f', 'g', 'h'四个字节
     char buf1[4 + len2 + 1];
     bb.get_string(4 + len2, buf1);
     cout << "buf1:[" << buf1 << "]" << endl;
