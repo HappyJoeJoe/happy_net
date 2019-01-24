@@ -19,6 +19,7 @@
 
 /* user defined header */
 #include "co_thread.h"
+#include "buffer.h"
 
 using namespace std;
 
@@ -38,7 +39,7 @@ using namespace std;
 	if(0 != RET) return RET;
 
 
-typedef struct buffer_s         buffer_t;
+typedef class buffer            buffer_t;
 typedef struct task_s 			task_t;
 typedef struct event_s 			event_t;
 typedef struct connection_s 	connection_t;
@@ -67,13 +68,6 @@ struct ip_addr
 	int32_t port;
 };
 
-struct buffer_s
-{
-	vector<char> buf;
-	int read_idx;
-	int write_idx;
-};
-
 struct connection_s
 {
 	int fd;			    //套接字
@@ -83,6 +77,8 @@ struct connection_s
 
 	buffer_t in_buf;    //网络包接受缓冲区
 	buffer_t out_buf;   //网络包发出缓冲区
+
+
 
 	event_t rev;	    //读事件
 	event_t wev;	    //写事件

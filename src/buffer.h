@@ -149,9 +149,9 @@ public:
 		return &*buf_.begin() + write_idx_;
 	}
 
-	int read_fd(int fd);
+	int et_read_fd(int fd);
 
-	int write_fd(int fd);
+	int lt_read_fd(int fd);
 
 	void debug_info()
 	{
@@ -199,6 +199,7 @@ private:
 
 	const static int reserve_size = 8;   //预留字段
 	const static int init_size    = 512; //初始化buf大小
+	const static int max_buffer_read = 16 * 1024;
 
 	
 };
