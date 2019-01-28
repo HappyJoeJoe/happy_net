@@ -20,6 +20,7 @@
 /* user defined header */
 #include "co_thread.h"
 #include "buffer.h"
+#include "error.h"
 
 using namespace std;
 
@@ -77,8 +78,6 @@ struct connection_s
 
 	buffer_t in_buf;    //网络包接受缓冲区
 	buffer_t out_buf;   //网络包发出缓冲区
-
-
 
 	event_t rev;	    //读事件
 	event_t wev;	    //写事件
@@ -165,8 +164,8 @@ void update(connection_t* c, int event_type)
 	int fd = c->fd;
 	int efd = c->cycle->efd;
 	int events = 0;
-	struct epoll_event ee;
-
+	struct epoll_event ee = {0};
+	
 	if(c->active)
 	{
 		ope = EPOLL_CTL_MOD;
@@ -209,18 +208,20 @@ void update(connection_t* c, int event_type)
 
 int accept_handler(connection_t* lc)
 {
+
 	//如果是监听事件，优先处理
 	int ret = 0;
 	cycle_t* cycle = lc->cycle;
 	event_t* p_rev = &lc->rev;
 	int efd 	   = cycle->efd;
 
-	struct sockaddr_in ca;    
+	struct sockaddr_in ca;
 	socklen_t len = sizeof(ca);
 
 	int fd = 0;
 	while((fd = accept4(lfd, (sockaddr *)&ca, &len, SOCK_NONBLOCK)) > 0)
 	{
+		printf("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
 		connection_t* p_conn = new connection_t();
 		p_conn->fd 			 = fd;
 		// p_conn->rev.handler  = read_handler;
@@ -333,39 +334,30 @@ int read_example_handler(connection_t* c)
 	int efd 	   = cycle->efd;
 
 	event_t* p_rev = &c->rev;
+	buffer_t& in_buffer = c->in_buf;
 	int fd = c->fd;
-	char buf[128] = {0};
 	int ret = 0;
 	int num = 0;
+	int err = 0;
 
-	while(1) 
+	ret = in_buffer.read_buf(fd, err);
+	if(ret < 0)
 	{
-		ret = recv(fd, buf, 128, 0);
-		if(ret > 0)
-		{
-			num += ret;
-			printf("recv fd:[%d] buf:[%s] size:[%d]\n", fd, buf, ret);
-			// return ret;
-			break;
-		}
-		if(ret == 0)
-		{
-			printf("eof\n");
-			return 0;
-		}
-		if(errno == EAGAIN || errno == EWOULDBLOCK)
-		{
-			return errno;
-		}
+		printf("%s\n", "close client connection");
+		return -1;
 	}
+
+	char buf[ret+1];
+	buf[ret] = '\0';
+
+	in_buffer.get_string(ret, buf);
+	printf("方法:%s 行号:%d ==> recv fd:[%d] buf:[%s] size:[%d], readable_size:%d\n", 
+		__func__, __LINE__, fd, buf, ret, in_buffer.readable_size());
 
 	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
 	int size = strlen(str);
 
-	// printf("size:[%d]\n", size);
-
 	ret = send(fd, str, size, 0);
-	// ret = send(fd, buf, num, 0);
 	if(ret == num)
 	{
 		printf("send fd:[%d] buf:[%s], ret:[%d]\n", fd, str, ret);
@@ -692,24 +684,23 @@ static int32_t work_process_cycle()
 			connection_t* c 		= (connection_t *)ee->data.ptr;
 			int fd 					= c->fd;
 
-			printf("fd[%d] events[%d], events & EPOLLIN:[%d], events & EPOLLOUT:[%d], events & EPOLLRDHUP:[%d]\n", 
-				c->fd, events, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
+			printf("loc:[%s] line:[%d] fd[%d] EPOLLIN:[%d], EPOLLOUT:[%d], EPOLLRDHUP:[%d]\n", 
+				__func__, __LINE__, c->fd, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
 
-			if(events & EPOLLRDHUP)
-			{
-				ret = epoll_ctl(efd, EPOLL_CTL_DEL, c->fd, ee);
-				if(0 != ret)
-				{
-					printf("epoll_ctl del err, fd[%d], ret[%d]\n", c->fd, ret);
-				}
-				close(c->fd);
-				// printf("客户端fd:[%d] 断联\n", c->fd);
-				continue;
-			}
+			// if(events & EPOLLRDHUP)
+			// {
+			// 	ret = epoll_ctl(efd, EPOLL_CTL_DEL, c->fd, ee);
+			// 	if(0 != ret)
+			// 	{
+			// 		printf("epoll_ctl del err, fd[%d], ret[%d]\n", c->fd, ret);
+			// 	}
+			// 	close(c->fd);
+			// 	continue;
+			// }
 
 			if(events & EPOLLIN)
 			{
-				printf("读事件\n");
+				// printf("读事件\n");
 				if(!c->ready)
 				{
 
@@ -735,7 +726,7 @@ static int32_t work_process_cycle()
 			
 			if(events & EPOLLOUT)
 			{
-				printf("写事件\n");
+				// printf("写事件\n");
 				//加入写事件队列
 				task_t task;
 				task.handler = (void *)c->wev.handler;

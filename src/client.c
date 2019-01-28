@@ -32,15 +32,14 @@ int main(int argc, char const *argv[])
 		_exit(ret);
 	}
 
-
 	for(int i = 0; i < 1; i++)
-	while(1)
+	// while(1)
 	{
 		char buf[128] = "GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n";
 		ret = write(fd, buf, sizeof(buf));
 		printf("write buf[%s]\n", buf);
 
-		sleep(3);
+		// sleep(3);
 
 		char tmp[128] = {0};
 		if((ret = read(fd, tmp, sizeof(tmp))) > 0)

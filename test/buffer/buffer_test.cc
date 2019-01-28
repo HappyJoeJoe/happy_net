@@ -17,7 +17,7 @@ int main(int argc, char const *argv[])
 	o.age = 20;
 	o.c = 'a';
 	o.height = 200000;
-	o.ptr = "hello world!";
+	o.ptr = const_cast<char*>("hello world!");
 
 	const char* str = "I'm very happy";
 	size_t len = strlen(str);

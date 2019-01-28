@@ -1,11 +1,18 @@
 #ifndef __VEC_BUFFER_H__
 #define __VEC_BUFFER_H__
 
+/* unix header */
+#include <unistd.h>
+
+/* c header */
 #include <vector>
 #include <assert.h>
 #include <algorithm>
 #include <string.h>
 #include <iostream>
+
+/* user defined header */
+#include "error.h"
 
 using namespace std;
 
@@ -55,7 +62,7 @@ public:
 	 */
 	int peek_string(size_t len, char* ptr)
 	{
-		if(len + 1 <= readable_size())
+		if(len <= readable_size())
 		{
 			copy(read_begin(),
 			     read_begin() + len,
@@ -91,13 +98,13 @@ public:
 	 */
 	int get_string(size_t len, char* ptr)
 	{
-		if(len + 1 <= readable_size())
+		if(len <= readable_size())
 		{
 			copy(read_begin(),
-			     read_begin() + len + 1,
+			     read_begin() + len,
 			     ptr);
 
-			read_idx_ += (len + 1);
+			read_idx_ += len;
 			return len;
 		}
 
@@ -125,33 +132,29 @@ public:
 	int append_string(const char* ptr)
 	{
 		size_t len = strlen(ptr);
-		if(len + 1 > writable_size())
+		if(len > writable_size())
 		{
-			make_space(len + 1);
+			make_space(len);
 		}
 
 		copy(ptr,
-			 ptr + len + 1,
+			 ptr + len,
 			 write_begin());
 
-		write_idx_ += (len + 1);
+		write_idx_ += len;
 
 		return len;
 	}
 
-	char* read_begin()
-	{
-		return &*buf_.begin() + read_idx_;
-	}
+	char* read_begin() { return &*buf_.begin() + read_idx_; }
 
-	char* write_begin()
-	{
-		return &*buf_.begin() + write_idx_;
-	}
+	const char* read_begin() const { return &*buf_.begin() + read_idx_; }
 
-	int et_read_fd(int fd);
+	char* write_begin() { return &*buf_.begin() + write_idx_; }
 
-	int lt_read_fd(int fd);
+	const char* write_begin() const { return &*buf_.begin() + write_idx_; }
+
+	int read_buf(int fd, int& err);
 
 	void debug_info()
 	{
@@ -167,6 +170,18 @@ private:
 	int has_read()
 	{
 		return read_idx_ - reserve_size;
+	}
+
+	int read_once(int fd, char* buf, int size);
+
+	void set_write_idx(size_t len)
+	{
+		write_idx_ += len;
+	}
+
+	void set_read_idx(size_t len)
+	{
+		read_idx_ += len;
 	}
 
 	int make_space(size_t len)
@@ -197,8 +212,8 @@ private:
 	int read_idx_;
 	int write_idx_;
 
-	const static int reserve_size = 8;   //预留字段
-	const static int init_size    = 512; //初始化buf大小
+	const static int reserve_size = 8;       //预留字段
+	const static int init_size    = 125;    //初始化buf大小
 	const static int max_buffer_read = 16 * 1024;
 
 	

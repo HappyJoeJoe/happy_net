@@ -1,8 +1,9 @@
 all: 
 	g++ -std=c++11 -g -c co_thread.cc 
-	g++ -std=c++11 -g -o ser frame.cc co_thread.o -ldl
+	g++ -std=c++11 -g -c buffer.cc 
+	g++ -std=c++11 -g -o ser frame.cc co_thread.o buffer.o -ldl
 
 	g++ -std=c++11 -g -o cli client.c
 
 clean:
-	rm -f co_thread.o frame.o ser cli
+	rm -f co_thread.o frame.o buffer.o ser cli
