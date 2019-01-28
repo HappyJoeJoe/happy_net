@@ -13,7 +13,7 @@ int buffer::read_once(int fd, char* buf, int size)
 			err = errno;
 			if(EAGAIN == err)
 			{
-				// printf("loc:[%s] line:[%d]  EAGAIN  buf:%s, n_read:%d\n", __func__, __LINE__, buf, n_read);
+				printf("loc:[%s] line:[%d]  EAGAIN  n_read:%d\n", __func__, __LINE__, n_read);
 				return kBUFFER_EAGAIN;
 			}
 			else if(EINTR == err)
@@ -26,7 +26,7 @@ int buffer::read_once(int fd, char* buf, int size)
 		}
 		else if(n_read >= 0)
 		{
-			// printf("loc:[%s] line:[%d]  n_read>=0  buf:%s, n_read:%d\n", __func__, __LINE__, buf, n_read);
+			printf("loc:[%s] line:[%d]  n_read>=0  n_read:%d\n", __func__, __LINE__, n_read);
 			break;
 		}
 		

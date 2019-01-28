@@ -30,6 +30,7 @@ using namespace std;
 #define LISTEN_SIZE 	256
 #define IP 				"172.18.185.251"
 #define TIME_OUT 		3
+#define STRING_EOF      '\0'
 
 #define READ_EVENT 		 EPOLLIN | EPOLLET | EPOLLRDHUP
 #define WRITE_EVENT 	 EPOLLOUT
@@ -348,7 +349,7 @@ int read_example_handler(connection_t* c)
 	}
 
 	char buf[ret+1];
-	buf[ret] = '\0';
+	buf[ret] = STRING_EOF;
 
 	in_buffer.get_string(ret, buf);
 	printf("方法:%s 行号:%d ==> recv fd:[%d] buf:[%s] size:[%d], readable_size:%d\n", 
@@ -358,7 +359,7 @@ int read_example_handler(connection_t* c)
 	int size = strlen(str);
 
 	ret = send(fd, str, size, 0);
-	if(ret == num)
+	if(ret == size)
 	{
 		printf("send fd:[%d] buf:[%s], ret:[%d]\n", fd, str, ret);
 
@@ -373,7 +374,7 @@ int read_example_handler(connection_t* c)
 		return ret;
 	}
 
-	if(ret < num)
+	if(ret < size)
 	{
 		printf("EAGAIN:[%d]\n", EAGAIN);
 		update(c, READ_EVENT);
