@@ -146,6 +146,22 @@ public:
 		return len;
 	}
 
+	int append_string(size_t size, const char* ptr)
+	{
+		if(size > writable_size())
+		{
+			make_space(size);
+		}
+
+		copy(ptr,
+			 ptr + size,
+			 write_begin());
+
+		write_idx_ += size;
+
+		return size;
+	}
+
 	char* read_begin() { return &*buf_.begin() + read_idx_; }
 
 	const char* read_begin() const { return &*buf_.begin() + read_idx_; }
