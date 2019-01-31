@@ -29,7 +29,6 @@ using namespace std;
 #define PORT 			8888
 #define EPOLL_SIZE 		1024
 #define LISTEN_SIZE 	256
-#define IP 				"172.18.185.251"
 #define TIME_OUT 		3
 #define STRING_EOF      '\0'
 
@@ -800,7 +799,6 @@ static int32_t Init()
 
    	addr.sin_family 		= AF_INET;
 	addr.sin_port 			= htons(PORT);
-	// addr.sin_addr.s_addr   	= inet_addr(IP);
 	addr.sin_addr.s_addr   	= INADDR_ANY;
 	
 	ret = bind(lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
