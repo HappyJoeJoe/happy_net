@@ -29,17 +29,6 @@ public:
 
 	}
 
-	int readable_size()
-	{
-		assert(write_idx_ - read_idx_ >= 0);
-		return write_idx_ - read_idx_;
-	}
-
-	int writable_size()
-	{
-		return buf_.size() - write_idx_;
-	}
-
 	template<typename T>
 	int peek(T& t) 
 	{
@@ -132,6 +121,12 @@ public:
 	int append_string(const char* ptr)
 	{
 		size_t len = strlen(ptr);
+
+		return append_string(len, ptr);
+	}
+
+	int append_string(size_t len, const char* ptr)
+	{
 		if(len > writable_size())
 		{
 			make_space(len);
@@ -146,22 +141,6 @@ public:
 		return len;
 	}
 
-	int append_string(size_t size, const char* ptr)
-	{
-		if(size > writable_size())
-		{
-			make_space(size);
-		}
-
-		copy(ptr,
-			 ptr + size,
-			 write_begin());
-
-		write_idx_ += size;
-
-		return size;
-	}
-
 	char* read_begin() { return &*buf_.begin() + read_idx_; }
 
 	const char* read_begin() const { return &*buf_.begin() + read_idx_; }
@@ -170,7 +149,20 @@ public:
 
 	const char* write_begin() const { return &*buf_.begin() + write_idx_; }
 
+	int readable_size()
+	{
+		assert(write_idx_ - read_idx_ >= 0);
+		return write_idx_ - read_idx_;
+	}
+
+	int writable_size()
+	{
+		return buf_.size() - write_idx_;
+	}
+	
 	int read_buf(int fd, int& err);
+
+	int write_once(int fd, int& err);
 
 	void debug_info()
 	{

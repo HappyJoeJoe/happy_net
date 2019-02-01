@@ -13,7 +13,7 @@ int buffer::read_once(int fd, char* buf, int size)
 			err = errno;
 			if(EAGAIN == err)
 			{
-				printf("loc:[%s] line:[%d]  EAGAIN  n_read:%d\n", __func__, __LINE__, n_read);
+				printf("%s|%s|%d  EAGAIN  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
 				return kBUFFER_EAGAIN;
 			}
 			else if(EINTR == err)
@@ -26,7 +26,7 @@ int buffer::read_once(int fd, char* buf, int size)
 		}
 		else if(n_read >= 0)
 		{
-			printf("loc:[%s] line:[%d]  n_read>=0  n_read:%d\n", __func__, __LINE__, n_read);
+			printf("%s|%s|%d  n_read >= 0  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
 			break;
 		}
 		
@@ -45,7 +45,7 @@ int buffer::read_buf(int fd, int& err)
 		ret = read_once(fd, write_begin(), writable_size());
 		if(kBUFFER_ERROR == ret)
 		{
-			printf("loc:[%s] line:[%d] fd:%d  read error \n", __func__, __LINE__, fd);
+			printf("%s|%s|%d  fd:%d  read error\n", __FILE__, __func__, __LINE__, fd);
 			err = kBUFFER_ERROR;
 			return -1;
 		}
@@ -58,7 +58,7 @@ int buffer::read_buf(int fd, int& err)
 				break;
 			}
 
-			printf("loc:[%s] line:[%d] fd:%d  EAGAIN \n", __func__, __LINE__, fd);
+			printf("%s|%s|%d  fd:%d  EAGAIN \n", __FILE__, __func__, __LINE__, fd);
 			return -1;
 		}
 		else if(ret == 0)
@@ -70,7 +70,7 @@ int buffer::read_buf(int fd, int& err)
 				break;
 			}
 
-			printf("loc:[%s] line:[%d] fd:%d  eof \n", __func__, __LINE__, fd);
+			printf("%s|%s|%d  fd:%d  eof \n", __FILE__, __func__, __LINE__, fd);
 			return -1;
 		}
 		else
@@ -80,7 +80,7 @@ int buffer::read_buf(int fd, int& err)
 
 			if(writable_size() == 0)
 			{
-				printf("loc:[%s] line:[%d] fd:%d  make more space \n", __func__, __LINE__, fd);
+				printf("locaton:%s|%s|%d  fd:%d  make more space \n", __FILE__, __func__, __LINE__, fd);
 				make_space(init_size);
 			}
 
@@ -89,4 +89,41 @@ int buffer::read_buf(int fd, int& err)
 	}
 
 	return count;
+}
+
+int buffer::write_once(int fd, int& err)
+{
+	int n_write = 0;
+
+	do
+	{
+		n_write = write(fd, read_begin(), readable_size());
+		if(-1 == n_write)
+		{
+			err = errno;
+			if(EAGAIN == err)
+			{
+				printf("%s->%s:%d  EAGAIN  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
+				err = kBUFFER_EAGAIN;
+				return -1;
+			}
+			else if(EINTR == err)
+			{
+			}
+			else
+			{
+				err = kBUFFER_ERROR;
+				return -1;
+			}
+		}
+		else if(n_write >= 0)
+		{
+			printf("%s->%s:%d  n_write >= 0  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
+			set_read_idx(n_write);
+			break;
+		}
+		
+	}while(err == EINTR); //未读取数据之前遇到信号中断，则重读
+
+	return n_write;
 }

@@ -25,15 +25,14 @@
 
 using namespace std;
 
-#define CPU_NUM 		1
 #define PORT 			8888
 #define EPOLL_SIZE 		1024
 #define LISTEN_SIZE 	256
 #define TIME_OUT 		3
 #define STRING_EOF      '\0'
 
-#define READ_EVENT 		 EPOLLIN | EPOLLET | EPOLLRDHUP
-#define WRITE_EVENT 	 EPOLLOUT
+#define READ_EVENT 		 (1 << 0)
+#define WRITE_EVENT 	 (1 << 1)
 
 // #define gettid() syscall(SYS_gettid)  
 
@@ -45,8 +44,7 @@ typedef class buffer            buffer_t;
 typedef int (*event_handler)(connection_t *);
 typedef void (*timer_func)(void *);
 
-int read_example_handler(connection_t* c);
-
+int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
 int32_t process;
 int lfd;
 
@@ -78,6 +76,7 @@ typedef struct cycle_s
 typedef struct connection_s
 {
 	int fd;			    //套接字
+	int mask;           //事件类型掩码
 	
 	ip_addr local_addr; //本地地址
 	ip_addr peer_addr;  //对端地址
@@ -93,6 +92,7 @@ typedef struct connection_s
 	int active:1; 	    //链接是否已加入epoll队列中
 	int accept:1; 	    //是否用于监听套接字
 	int ready:1;  	    //第一次建立链接是否有开始数据，没有则不建立请求体
+	int stop:1;         //删除连接用到的标记位
 } connection_t;
 
 int set_fd_noblock(int fd)
@@ -143,53 +143,54 @@ int empty_handler(connection_t* c)
 	return 0;
 }
 
-void update(connection_t* c, int event_type)
+int epoll_add_event(connection_t* c, int ep_fd, int sock_fd, int mask)
+{
+	int ret     = 0;
+	int op      = c->active ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
+	struct epoll_event ee = {0};
+
+	mask |= c->mask;
+	if(mask & READ_EVENT)  ee.events |= EPOLLIN | EPOLLET | EPOLLRDHUP;
+	if(mask & WRITE_EVENT) ee.events |= EPOLLOUT;
+	ee.data.ptr = (void *) c;
+
+	ret = epoll_ctl(ep_fd, op, sock_fd, &ee);
+	if(0 != ret) 
+	{
+		printf("method:[%s] line:[%d] | errno msg:%s \n", 
+			__func__, __LINE__, strerror(errno));
+		return -1;
+	}
+
+	c->active = 1;
+
+	return 0;
+}
+
+int epoll_delete_event(connection_t* c, int ep_fd, int sock_fd, int del_mask)
 {
 	int ret = 0;
-	int ope = 0;
-	int fd = c->fd;
-	int efd = c->cycle->efd;
-	int events = 0;
+	int op  = EPOLL_CTL_DEL;
 	struct epoll_event ee = {0};
-	
-	if(c->active)
+
+	del_mask |= c->mask;
+	if(del_mask & READ_EVENT)  ee.events |= EPOLLIN | EPOLLET | EPOLLRDHUP;
+	if(del_mask & WRITE_EVENT) ee.events |= EPOLLOUT;
+
+	ret = epoll_ctl(ep_fd, op, sock_fd, &ee);
+	if(0 != ret)
 	{
-		ope = EPOLL_CTL_MOD;
-	}
-	else
-	{
-		ope = EPOLL_CTL_ADD;
-		c->active = 1;
+		printf("method:[%s] line:[%d] | errno msg:%s \n", 
+			__func__, __LINE__, strerror(errno));
+		return -1;
 	}
 
-	if(event_type == READ_EVENT)
+	if(del_mask & READ_EVENT & WRITE_EVENT)
 	{
-		if(ope == EPOLL_CTL_ADD)
-		{
-			events = event_type;
-		}
-		else
-		{
-			events = event_type | EPOLLOUT;
-		}
-	}
-	else
-	{
-		if(ope == EPOLL_CTL_ADD)
-		{
-			events = EPOLLOUT;
-		}
-		else
-		{
-			// events = event_type | EPOLLIN | EPOLLRDHUP;
-			events = event_type | EPOLLIN | EPOLLET | EPOLLRDHUP;
-		}
+		c->active = 0;	
 	}
 
-	ee.events |= events;
-	ee.data.ptr = (void *) c;
-	
-	ret = epoll_ctl(efd, ope, fd, &ee);
+	return 0;
 }
 
 int accept_handler(connection_t* lc)
@@ -210,32 +211,15 @@ int accept_handler(connection_t* lc)
 		printf("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
 		connection_t* p_conn = new connection_t();
 		p_conn->fd 			 = fd;
-		p_conn->rev.handler  = read_example_handler;
+		p_conn->rev.handler  = read_handler;
 		p_conn->rev.arg 	 = p_conn;
 		p_conn->wev.handler  = empty_handler;
 		p_conn->wev.arg 	 = p_conn;
 
 		p_conn->cycle = lc->cycle;
 
-		struct epoll_event ee = 
-		{
-			EPOLLIN | EPOLLET | EPOLLRDHUP,
-			(void *)p_conn
-		};
-
-		update(p_conn, READ_EVENT);
-		// p_conn->active = 1;
-		// ret = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ee);
-		// if(0 != ret)
-		// {
-			
-		// }
-		
-
-		// printf("lfd[%d] accept fd[%d] sucess\n", lfd, fd);
+		epoll_add_event(p_conn, efd, p_conn->fd, READ_EVENT);
 	}
-
-	// printf("accept_handler complete\n");
 
 	return 0;
 }
@@ -246,69 +230,20 @@ int init_request()
 	
 }
 
-int read_handler(connection_t* c)
+int free_connection(connection_t* c)
 {
 	cycle_t* cycle = c->cycle;
 	int efd 	   = cycle->efd;
+	int fd         = c->fd;
 
-	event_t* p_rev = &c->rev;
-	int fd = c->fd;
-	char buf[128] = {0};
-	int ret = 0;
-	int num = 0;
-
-	while(1) 
+	int ret = epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
+	if(0 != ret)
 	{
-		ret = recv(fd, buf, 128, 0);
-		if(ret > 0)
-		{
-			num += ret;
-			printf("recv fd:[%d] buf:[%s] size:[%d]\n", fd, buf, ret);
-			// return ret;
-			break;
-		}
-		if(ret == 0)
-		{
-			printf("eof\n");
-			return 0;
-		}
-		if(errno == EAGAIN || errno == EWOULDBLOCK)
-		{
-			return errno;
-		}
+
 	}
-
-	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
-	int size = strlen(str);
-
-	ret = send(fd, str, size, 0);
-	if(ret == size)
-	{
-		printf("send fd:[%d] buf:[%s], ret:[%d]\n", fd, str, ret);
-		free_connection(c);
-		return ret;
-	}
-
-	if(ret < size)
-	{
-		printf("EAGAIN:[%d]\n", EAGAIN);
-		update(c, READ_EVENT);
-		c->wev.handler = write_handler; //install write handler
-
-		return ret;
-	}
-
-	return num;
-}
-
-int free_connection(connection_t* c)
-{
-	int fd = c->fd;
-	struct epoll_event ee;
-	ee.events = 0;
-	ee.data.ptr = NULL;
-	epoll_ctl(efd, EPOLL_CTL_DEL, fd, &ee);
 	close(fd);
+
+	//如果没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1
 	delete c;
 
 	return 0;	
@@ -324,17 +259,18 @@ int parse_protocol_handler(connection_t* c)
 	buf[buffer_len] = '\0';
 	in_buffer.get_string(buffer_len, buf);
 	// char* line = strchr(buf, '/');
-	printf("loc:[%s] line:[%d]  ans:%s\n", __func__, __LINE__, buf);
+	// printf("=========> ans:%s\n", buf);
 
 	return 0;
 }
 
+/* 业务处理函数 */
 int client_handler(connection_t* c)
 {
 	return 0;
 }
 
-int read_example_handler(connection_t* c)
+int read_handler(connection_t* c)
 {
 	cycle_t* cycle = c->cycle;
 	int efd 	   = cycle->efd;
@@ -352,49 +288,54 @@ int read_example_handler(connection_t* c)
 		return -1;
 	}
 
-	// char buf[ret+1];
-	// buf[ret] = STRING_EOF;
-
-	// in_buffer.get_string(ret, buf);
-	// printf("方法:%s 行号:%d ==> recv fd:[%d] buf:[%s] size:[%d], readable_size:%d\n", 
-	// 	__func__, __LINE__, fd, buf, ret, in_buffer.readable_size());
-
 	ret = parse_protocol_handler(c);
-	if(ret != 0) return -1;
+	if(0 != ret) return -1;
 
 	client_handler(c);
 
-	const char* ptr =
-	 	"HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo hello jiabo !";
-	// const char* ptr = ss.str().c_str();
-	int size = strlen(ptr);
-	int len = size/2;
+	/* ---------------------------------------------------- */
+	// const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
+	// int size = strlen(str);
+
+	// ret = send(fd, str, size, 0);
+	// if(ret == size)
+	// {
+	// 	printf("send fd:[%d] buf:[%s], ret:[%d]\n", fd, str, ret);
+	// 	free_connection(c);
+	// 	return ret;
+	// }
+
+	// if(ret < size)
+	// {
+	// 	printf("EAGAIN:[%d]\n", EAGAIN);
+	// 	epoll_add_event(c, efd, fd, WRITE_EVENT);
+	// 	c->wev.handler = write_handler; //install write handler
+
+	// 	return ret;
+	// }
+
+	/* ---------------------------------------------------- */
+	
+	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
 	buffer_t& out_buf = c->out_buf;
-
-	ret = write(fd, ptr, len);
-	if(ret == size)
-	{
-		printf("send complete:[%d]\n", ret);
-		struct epoll_event ee;
-		ee.events = 0;
-		ee.data.ptr = NULL;
-		ret = epoll_ctl(efd, EPOLL_CTL_DEL, fd, &ee);
-
-		close(fd);
-
-		delete c;
-		return ret;
-	}
-
-	if(ret < size)
-	{
-		printf("send EAGAIN\n");
-		out_buf.append_string(size - ret, ptr + ret);
-		update(c, READ_EVENT);
-		c->wev.handler = write_handler;
-
-		return ret;
-	}
+	out_buf.append_string(str);
+	printf("========>  str len:%lu, buf_len:%d, buf:%s\n", strlen(str), out_buf.readable_size(), out_buf.read_begin());
+	ret = out_buf.write_once(fd, err);
+	printf("write has_write:%d unwrite:%d\n", ret, out_buf.readable_size());
+	// if(out_buf.writable_size() > 0)
+	// {
+	// 	printf("%s\n", "1111111111111");
+	// 	epoll_add_event(c, efd, fd, WRITE_EVENT);
+	// 	c->wev.handler = write_handler;
+	// }
+	// else
+	// {
+	// 	printf("%s\n", "2222222222222");
+	// 	//如果（没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1）
+	// 	free_connection(c);
+	// 	//否则
+	// 	c->stop = 1;
+	// }
 
 	return ret;
 }
@@ -409,44 +350,16 @@ int write_empty_handler(connection_t* c)
    如果写完以后，要置 write_handler 为 emtpy_handler，否则有可能写事件再次出发 */
 int write_handler(connection_t* c)
 {
-	event_t* p_wev = &c->wev;
+	int err = 0;
 	int fd = c->fd;
 	buffer_t& out_buffer = c->out_buf;
-	size_t size_buf = 1024 * 1024;
-	int ret = 0;
-	int num = 0;
-
-	char* tmp = new char[size_buf];
-	memset(tmp, 2, size_buf);
-
-	while(1)
+	
+	int ret = out_buffer.write_once(fd, err);
+	if(out_buffer.writable_size() == 0)
 	{
-		ret = write(fd, tmp, size_buf);
-		if(ret > 0)
-		{
-			return ret;
-		}
-		
-		if(0 == ret)
-		{
-			printf("write() size = 0\n");
-			return ret;
-		}
-
-		if (ret == EAGAIN || ret == EINTR) 
-		{
-	        printf("write() not ready\n");
-	        if (ret == EAGAIN) {
-	    		return EAGAIN;
-	    	}
-	    }
-	    else
-	    {
-	    	return ret;
-	    }
+		c->wev.handler = write_empty_handler;
+		free_connection(c);
 	}
-
-	c->wev.handler = write_empty_handler;
 
 	return ret;
 }
@@ -825,8 +738,9 @@ int32_t main(int32_t argc, char* argv[])
 {
 	int32_t ret = Init();
 	RETURN_CHECK(ret);
+	printf("cpu_num=%d\n", cpu_num);
 
-	// for (int32_t i = 0; i < CPU_NUM; ++i)
+	// for (int32_t i = 0; i < cpu_num; ++i)
 	// {
 	// 	pid_t pid = fork();
 	// 	switch(pid)
