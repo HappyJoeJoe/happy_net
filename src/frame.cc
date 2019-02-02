@@ -39,8 +39,8 @@ using namespace std;
 #define RETURN_CHECK(RET) \
 	if(0 != RET) return RET;
 
+typedef class buffer        buffer_t;
 typedef struct connection_s connection_t;
-typedef class buffer            buffer_t;
 typedef int (*event_handler)(connection_t *);
 typedef void (*timer_func)(void *);
 
@@ -52,19 +52,20 @@ typedef struct event_s
 {
 	event_handler handler;
 	void* arg;
-	int timer:1;	//是否设置了定时器
+	int   mask;
 } event_t;
 
 typedef struct ip_addr
 {
-	string ip;
-	int32_t port;
+	string  ip;
+	int     port;
 } ip_addr;
 
 typedef struct task_s
 {
 	void* handler;
 	void* arg;
+	int   type;
 } task_t;
 
 typedef struct cycle_s
@@ -193,9 +194,44 @@ int epoll_delete_event(connection_t* c, int ep_fd, int sock_fd, int del_mask)
 	return 0;
 }
 
+int epoll_add_listen(connection_t* c, int ep_fd, int listen_fd)
+{
+	int ret = 0;
+	struct epoll_event ee = {0};
+	ee.events = EPOLLIN | EPOLLRDHUP;
+	ee.data.ptr = c;
+
+	ret = epoll_ctl(ep_fd, EPOLL_CTL_ADD, listen_fd, &ee);
+	if(0 != ret)
+	{
+		printf("method:[%s] line:[%d] | errno msg:%s \n", 
+			__func__, __LINE__, strerror(errno));
+		return -1;
+	}
+
+	return 0;
+}
+
+int epoll_del_listen(connection_t* c, int ep_fd, int listen_fd)
+{
+	int ret = 0;
+	struct epoll_event ee = {0};
+	ee.events = EPOLLIN | EPOLLRDHUP;
+	ee.data.ptr = c;
+
+	ret = epoll_ctl(ep_fd, EPOLL_CTL_DEL, listen_fd, &ee);
+	if(0 != ret)
+	{
+		printf("method:[%s] line:[%d] | errno msg:%s \n", 
+			__func__, __LINE__, strerror(errno));
+		return -1;
+	}
+
+	return 0;
+}
+
 int accept_handler(connection_t* lc)
 {
-
 	//如果是监听事件，优先处理
 	int ret = 0;
 	cycle_t* cycle = lc->cycle;
@@ -215,8 +251,7 @@ int accept_handler(connection_t* lc)
 		p_conn->rev.arg 	 = p_conn;
 		p_conn->wev.handler  = empty_handler;
 		p_conn->wev.arg 	 = p_conn;
-
-		p_conn->cycle = lc->cycle;
+		p_conn->cycle        = lc->cycle;
 
 		epoll_add_event(p_conn, efd, p_conn->fd, READ_EVENT);
 	}
@@ -236,11 +271,7 @@ int free_connection(connection_t* c)
 	int efd 	   = cycle->efd;
 	int fd         = c->fd;
 
-	int ret = epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
-	if(0 != ret)
-	{
-
-	}
+	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
 	close(fd);
 
 	//如果没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1
@@ -267,6 +298,11 @@ int parse_protocol_handler(connection_t* c)
 /* 业务处理函数 */
 int client_handler(connection_t* c)
 {
+	buffer_t& out_buf = c->out_buf;
+
+	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
+	out_buf.append_string(str);
+
 	return 0;
 }
 
@@ -293,49 +329,22 @@ int read_handler(connection_t* c)
 
 	client_handler(c);
 
-	/* ---------------------------------------------------- */
-	// const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
-	// int size = strlen(str);
-
-	// ret = send(fd, str, size, 0);
-	// if(ret == size)
-	// {
-	// 	printf("send fd:[%d] buf:[%s], ret:[%d]\n", fd, str, ret);
-	// 	free_connection(c);
-	// 	return ret;
-	// }
-
-	// if(ret < size)
-	// {
-	// 	printf("EAGAIN:[%d]\n", EAGAIN);
-	// 	epoll_add_event(c, efd, fd, WRITE_EVENT);
-	// 	c->wev.handler = write_handler; //install write handler
-
-	// 	return ret;
-	// }
-
-	/* ---------------------------------------------------- */
-	
-	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
 	buffer_t& out_buf = c->out_buf;
-	out_buf.append_string(str);
-	printf("========>  str len:%lu, buf_len:%d, buf:%s\n", strlen(str), out_buf.readable_size(), out_buf.read_begin());
+	// printf("========>  str len:%lu, buf_len:%d, buf:%s\n", strlen(str), out_buf.readable_size(), out_buf.read_begin());
 	ret = out_buf.write_once(fd, err);
 	printf("write has_write:%d unwrite:%d\n", ret, out_buf.readable_size());
-	// if(out_buf.writable_size() > 0)
-	// {
-	// 	printf("%s\n", "1111111111111");
-	// 	epoll_add_event(c, efd, fd, WRITE_EVENT);
-	// 	c->wev.handler = write_handler;
-	// }
-	// else
-	// {
-	// 	printf("%s\n", "2222222222222");
-	// 	//如果（没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1）
-	// 	free_connection(c);
-	// 	//否则
-	// 	c->stop = 1;
-	// }
+	if(out_buf.readable_size() > 0)
+	{
+		epoll_add_event(c, efd, fd, WRITE_EVENT);
+		c->wev.handler = write_handler;
+	}
+	else
+	{
+		//如果（没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1）
+		free_connection(c);
+		//否则
+		c->stop = 1;
+	}
 
 	return ret;
 }
@@ -352,10 +361,12 @@ int write_handler(connection_t* c)
 {
 	int err = 0;
 	int fd = c->fd;
-	buffer_t& out_buffer = c->out_buf;
+	buffer_t& out_buf = c->out_buf;
 	
-	int ret = out_buffer.write_once(fd, err);
-	if(out_buffer.writable_size() == 0)
+	int ret = out_buf.write_once(fd, err);
+	printf("[%s->%s:%d] unwrite:%d\n", 
+		__FILE__, __func__, __LINE__, out_buf.readable_size());
+	if(out_buf.readable_size() == 0)
 	{
 		c->wev.handler = write_empty_handler;
 		free_connection(c);
@@ -488,7 +499,7 @@ void tmp_timer(void* arg)
 	printf("fuck!!!!!!!!!!!\n");
 }
 
-static int32_t work_process_cycle()
+static int work_process_cycle()
 {
 	int ret = 0;
 	int cnt = 0;
@@ -521,22 +532,18 @@ static int32_t work_process_cycle()
 	p_conn->cycle = &cycle;
 	p_conn->accept = 1;
 
-	struct epoll_event ee = 
-	{
-		EPOLLIN,
-		(void *)p_conn
-	};
-
-	ret = epoll_ctl(efd, EPOLL_CTL_ADD, lfd, &ee);
+	ret = epoll_add_listen(p_conn, efd, p_conn->fd);
 	if(0 != ret)
 	{
-		
+		printf("%s\n", "listen fd epoll_add failed");
+		return -1;
 	}
 
 	vector<struct epoll_event> ee_vec(EPOLL_SIZE);
 
 	uint64_t now = get_curr_msec();
 
+	/* 定时器 */
 	// add_every_timer(timer_queue, 3, 2, tmp_timer, NULL);
 
 	while(1)
@@ -608,8 +615,8 @@ static int32_t work_process_cycle()
 			connection_t* c 		= (connection_t *)ee->data.ptr;
 			int fd 					= c->fd;
 
-			printf("loc:[%s] line:[%d] fd[%d] EPOLLIN:[%d], EPOLLOUT:[%d], EPOLLRDHUP:[%d]\n", 
-				__func__, __LINE__, c->fd, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
+			// printf("loc:[%s] line:[%d] fd[%d] EPOLLIN:[%d], EPOLLOUT:[%d], EPOLLRDHUP:[%d]\n", 
+			// 	__func__, __LINE__, c->fd, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
 
 			// if(events & EPOLLRDHUP)
 			// {
@@ -761,6 +768,8 @@ int32_t main(int32_t argc, char* argv[])
 	// master_process_cycle();
 
 	work_process_cycle();
+
+
 	
 	return 0;
 }

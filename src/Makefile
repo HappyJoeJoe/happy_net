@@ -3,7 +3,7 @@ all:
 	g++ -std=c++11 -g -c buffer.cc 
 	g++ -std=c++11 -g -o ser frame.cc co_thread.o buffer.o -ldl
 
-	g++ -std=c++11 -g -o cli client.c
+	g++ -std=c++11 -g -o cli client.c buffer.o -ldl
 
 clean:
 	rm -f co_thread.o frame.o buffer.o ser cli

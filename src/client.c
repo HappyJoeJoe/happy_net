@@ -12,10 +12,13 @@
 #include <sys/time.h>
 #include <stdlib.h>
 
+#include "buffer.h"
+
 #define PORT 			8888
 #define IP 				"172.18.185.251"
 #define CLRF			\r\n
 
+typedef class buffer    buffer_t;
 
 int main(int argc, char const *argv[])
 {
@@ -35,16 +38,18 @@ int main(int argc, char const *argv[])
 	for(int i = 0; i < 1; i++)
 	// while(1)
 	{
-		char buf[128] = "GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n";
-		ret = write(fd, buf, sizeof(buf));
-		printf("write buf[%s]\n", buf);
+		int err;
+		buffer_t query_buf;
+		query_buf.append_string("GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n");
+		ret = query_buf.write_once(fd, err);
 
 		// sleep(3);
 
-		char tmp[128] = {0};
-		if((ret = read(fd, tmp, sizeof(tmp))) > 0)
+		buffer_t resp_buf;
+		if(ret = resp_buf.read_buf(fd, err))
 		{
-			printf("read tmp[%s]\n", tmp);
+			printf("read -------------------\n");
+			printf("[%s]\n", resp_buf.read_begin());
 		}
 	}
 
