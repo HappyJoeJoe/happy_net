@@ -135,11 +135,15 @@ int set_fd_cloexec(int fd)
 	return 0;
 }
 
+/* 
+ * 1. so_reuseaddr 允许处于[time_wait]的socket重复可用
+ * 2. 允许同一端口绑定多个实例，只要每个实例绑定本地ip地址不同即可
+ */
 int set_fd_reuseaddr(int fd)
 {
 	int yes = 1;
 
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const void *)&yes, sizeof(yes)) == -1)
     {
     	printf("set reuseaddr failed, errno msg:[%s]\n", strerror(errno));
         return -1;
@@ -594,13 +598,6 @@ static int work_process_cycle()
 	p_conn->cycle = &cycle;
 	p_conn->accept = 1;
 
-	ret = set_fd_reuseaddr(lfd);
-	if(0 != ret)
-	{
-		printf("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
-		return -1;
-	}
-
 	ret = epoll_add_listen(p_conn, efd, p_conn->fd);
 	if(0 != ret)
 	{
@@ -763,18 +760,12 @@ static int32_t Init()
 
 	lfd = socket(AF_INET, SOCK_STREAM, 0);
 
-	if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR,
-                   (const void *) &reuseaddr, sizeof(int))
-        == -1)
-    {
-        // if (ngx_close_socket(s) == -1) {
-        //     ngx_log_error(NGX_LOG_EMERG, log, ngx_socket_errno,
-        //                   ngx_close_socket_n " %V failed",
-        //                   &ls[i].addr_text);
-        // }
-
-        return -1;
-    }
+	ret = set_fd_reuseaddr(lfd);
+	if(0 != ret)
+	{
+		printf("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
+		return -1;
+	}
 
     ret = set_fd_noblock(lfd);
 	if(0 != ret)
@@ -793,7 +784,7 @@ static int32_t Init()
 	ret = bind(lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
 	if(0 != ret)
 	{
-		printf("process[%d] bind lfd[%d] failed\n", id, lfd);
+		printf("process[%d] bind lfd[%d] failed, errno msg:[%s]\n", id, lfd, strerror(errno));
 		exit(ret);
 	}
 
