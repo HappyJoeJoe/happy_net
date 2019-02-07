@@ -3,11 +3,15 @@
 
 enum buffer_errcode
 {
-	kBUFFER_EOF		= -1,
-	kBUFFER_EAGAIN  = -2,
-	kBUFFER_ERROR   = -3,
+	kBUFFER_EOF		= -10001,
+	kBUFFER_EAGAIN  = -10002,
+	kBUFFER_ERROR   = -10003,
 };
 
-
+enum decoder_errcode
+{
+	kDECODER_AGAIN  = -20001,
+	kDECODER_ERROR  = -20002,
+};
 
 #endif

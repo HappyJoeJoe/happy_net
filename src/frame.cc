@@ -74,6 +74,13 @@ typedef struct cycle_s
 	int lfd;
 } cycle_t;
 
+typedef struct request_s
+{
+	connection_t* c;
+	void* header;
+	void* body;
+} request_t;
+
 typedef struct connection_s
 {
 	int fd;			    //套接字
@@ -90,11 +97,15 @@ typedef struct connection_s
 
 	cycle_t* cycle;     //对应的事件循环结构体
 
+	
+
 	int active:1; 	    //链接是否已加入epoll队列中
 	int accept:1; 	    //是否用于监听套接字
 	int ready:1;  	    //第一次建立链接是否有开始数据，没有则不建立请求体
 	int stop:1;         //删除连接用到的标记位
 } connection_t;
+
+cycle_s cycle;
 
 int set_fd_noblock(int fd)
 {
@@ -104,7 +115,7 @@ int set_fd_noblock(int fd)
 	int ret = fcntl(fd, F_SETFL, flags);
 	if(0 != ret)
 	{
-
+		printf("set fd noblock failed, errno msg:[%s]\n", strerror(errno));
 	}
 
 	return 0;
@@ -118,21 +129,35 @@ int set_fd_cloexec(int fd)
 	int ret = fcntl(fd, F_SETFD, flags);
 	if(0 != ret)
 	{
-
+		printf("set fd cloexec failed, errno msg:[%s]\n", strerror(errno));
 	}
+
+	return 0;
+}
+
+int set_fd_reuseaddr(int fd)
+{
+	int yes = 1;
+
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
+    {
+    	printf("set reuseaddr failed, errno msg:[%s]\n", strerror(errno));
+        return -1;
+    }
 
 	return 0;
 }
 
 int set_fd_noblock_and_cloexec(int fd)
 {
-	if(set_fd_noblock(fd) == 0 &&
-		set_fd_cloexec(fd) == 0)
+	if(set_fd_noblock(fd) != 0 ||
+		set_fd_cloexec(fd) != 0)
 	{
-		return 0;
+		printf("set fd noblock & cloexec failed, errno msg:[%s]\n", strerror(errno));
+		return -1;
 	}
 
-	return -1;
+	return 0;
 }
 
 int read_handler(connection_t* c);
@@ -244,7 +269,7 @@ int accept_handler(connection_t* lc)
 	int fd = 0;
 	while((fd = accept4(lfd, (sockaddr *)&ca, &len, SOCK_NONBLOCK)) > 0)
 	{
-		printf("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
+		// printf("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
 		connection_t* p_conn = new connection_t();
 		p_conn->fd 			 = fd;
 		p_conn->rev.handler  = read_handler;
@@ -252,6 +277,13 @@ int accept_handler(connection_t* lc)
 		p_conn->wev.handler  = empty_handler;
 		p_conn->wev.arg 	 = p_conn;
 		p_conn->cycle        = lc->cycle;
+
+		ret = set_fd_reuseaddr(fd);
+		if(0 != ret)
+		{
+			printf("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
+			return -1;
+		}
 
 		epoll_add_event(p_conn, efd, p_conn->fd, READ_EVENT);
 	}
@@ -262,9 +294,10 @@ int accept_handler(connection_t* lc)
 /* 连接第一次创建时，设置的回调函数，因为第一次连接成功后，没有数据，则不初始化链接 */
 int init_request()
 {
-	
+	return 0;
 }
 
+/* 一个稍微复杂的过程 */
 int free_connection(connection_t* c)
 {
 	cycle_t* cycle = c->cycle;
@@ -277,20 +310,38 @@ int free_connection(connection_t* c)
 	//如果没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1
 	delete c;
 
-	return 0;	
+	return 0;
+}
+
+//解析buffer，直到解析完整请求
+int protocol_decoder(buffer_t& in_buffer, int& err)
+{
+	int buffer_len = in_buffer.readable_size();
+	char buf[buffer_len + 1];
+	buf[buffer_len] = '\0';
+	in_buffer.get_string(buffer_len, buf);
+
+	return 0;
 }
 
 /* 协议解析 */
 int parse_protocol_handler(connection_t* c)
 {
-	buffer_t& in_buffer = c->in_buf;
 	int ret = 0;
-	int buffer_len = in_buffer.readable_size();
-	char buf[buffer_len + 1];
-	buf[buffer_len] = '\0';
-	in_buffer.get_string(buffer_len, buf);
-	// char* line = strchr(buf, '/');
-	// printf("=========> ans:%s\n", buf);
+	int err = 0;
+	buffer_t& in_buffer = c->in_buf;
+	ret = protocol_decoder(in_buffer, err);
+	if(0 != ret && err == kDECODER_AGAIN)
+	{
+		return kDECODER_AGAIN;
+	}
+
+	if(0 != ret && err == kDECODER_ERROR)
+	{
+		return kDECODER_ERROR;
+	}
+
+
 
 	return 0;
 }
@@ -320,8 +371,22 @@ int read_handler(connection_t* c)
 	ret = in_buffer.read_buf(fd, err);
 	if(ret < 0)
 	{
-		printf("%s\n", "close client connection");
+		if(err == kBUFFER_EAGAIN)
+		{
+			return kBUFFER_EAGAIN;
+		}
+		
+		/* 其他错误直接释放链接 */
+		printf("buf read error, ret:[%d] errno msg:[%s]\n", ret, strerror(errno));
+		free_connection(c);	
+
 		return -1;
+	}
+
+	if(ret < 0 && err == kBUFFER_EOF)
+	{
+		free_connection(c);
+		return 0;
 	}
 
 	ret = parse_protocol_handler(c);
@@ -332,7 +397,7 @@ int read_handler(connection_t* c)
 	buffer_t& out_buf = c->out_buf;
 	// printf("========>  str len:%lu, buf_len:%d, buf:%s\n", strlen(str), out_buf.readable_size(), out_buf.read_begin());
 	ret = out_buf.write_once(fd, err);
-	printf("write has_write:%d unwrite:%d\n", ret, out_buf.readable_size());
+	// printf("write has_write:%d unwrite:%d\n", ret, out_buf.readable_size());
 	if(out_buf.readable_size() > 0)
 	{
 		epoll_add_event(c, efd, fd, WRITE_EVENT);
@@ -364,8 +429,7 @@ int write_handler(connection_t* c)
 	buffer_t& out_buf = c->out_buf;
 	
 	int ret = out_buf.write_once(fd, err);
-	printf("[%s->%s:%d] unwrite:%d\n", 
-		__FILE__, __func__, __LINE__, out_buf.readable_size());
+	// printf("[%s->%s:%d] unwrite:%d\n", __FILE__, __func__, __LINE__, out_buf.readable_size());
 	if(out_buf.readable_size() == 0)
 	{
 		c->wev.handler = write_empty_handler;
@@ -504,9 +568,7 @@ static int work_process_cycle()
 	int ret = 0;
 	int cnt = 0;
 	int64_t timer = -1;
-
-	cycle_s cycle;
-	
+		
 	timer_task_queue_t 		timer_task_queue;
 	timer_queue_t 			timer_queue;
 	io_task_queue_t 		io_task_queue;
@@ -532,10 +594,17 @@ static int work_process_cycle()
 	p_conn->cycle = &cycle;
 	p_conn->accept = 1;
 
+	ret = set_fd_reuseaddr(lfd);
+	if(0 != ret)
+	{
+		printf("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
+		return -1;
+	}
+
 	ret = epoll_add_listen(p_conn, efd, p_conn->fd);
 	if(0 != ret)
 	{
-		printf("%s\n", "listen fd epoll_add failed");
+		printf("listen fd epoll_add failed\n");
 		return -1;
 	}
 
@@ -736,6 +805,8 @@ static int32_t Init()
 		printf("process[%d] listen lfd[%d] failed\n", id, lfd);
 		exit(ret);
 	}
+
+	cycle.lfd = lfd;
 
 	printf("process[%d] listen lfd[%d] sucess\n", id, lfd);
 	return 0;
