@@ -173,6 +173,11 @@ public:
 		     << endl;
 	}
 
+	char* find_eof()
+	{
+		return strstr(read_begin(), "\r\n");
+	}
+
 private:
 
 	int has_read()

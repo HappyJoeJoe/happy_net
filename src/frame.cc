@@ -23,6 +23,9 @@
 #include "buffer.h"
 #include "error.h"
 
+/* pb */
+// #include "../pb/person.pb.h"
+
 using namespace std;
 
 #define PORT 			8888
@@ -44,9 +47,22 @@ typedef struct connection_s connection_t;
 typedef int (*event_handler)(connection_t *);
 typedef void (*timer_func)(void *);
 
+typedef struct task_s
+{
+	void* handler;
+	void* arg;
+	int   type;
+} task_t;
+
+typedef list<task_t>		timer_task_queue_t;
+typedef list<task_t>		io_task_queue_t;
+typedef list<task_t>		accept_task_queue_t;
+typedef map<uint64_t, list<task_t>>	timer_queue_t;
+
+
 int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
 int32_t process;
-int lfd;
+// int lfd;
 
 typedef struct event_s
 {
@@ -61,17 +77,15 @@ typedef struct ip_addr
 	int     port;
 } ip_addr;
 
-typedef struct task_s
-{
-	void* handler;
-	void* arg;
-	int   type;
-} task_t;
-
 typedef struct cycle_s
 {
-	int efd;
-	int lfd;
+	pid_t pid;
+	int   efd;
+	int   lfd;
+
+	timer_queue_t 			timer_queue;
+	io_task_queue_t 		io_task_queue;
+	accept_task_queue_t 	accept_task_queue;
 } cycle_t;
 
 typedef struct request_s
@@ -96,8 +110,6 @@ typedef struct connection_s
 	event_t wev;	    //写事件
 
 	cycle_t* cycle;     //对应的事件循环结构体
-
-	
 
 	int active:1; 	    //链接是否已加入epoll队列中
 	int accept:1; 	    //是否用于监听套接字
@@ -263,15 +275,15 @@ int accept_handler(connection_t* lc)
 {
 	//如果是监听事件，优先处理
 	int ret = 0;
-	cycle_t* cycle = lc->cycle;
-	event_t* p_rev = &lc->rev;
-	int efd 	   = cycle->efd;
+	cycle_t* p_cycle = lc->cycle;
+	event_t* p_rev   = &lc->rev;
+	int efd 	     = p_cycle->efd;
 
 	struct sockaddr_in ca;
 	socklen_t len = sizeof(ca);
 
 	int fd = 0;
-	while((fd = accept4(lfd, (sockaddr *)&ca, &len, SOCK_NONBLOCK)) > 0)
+	while((fd = accept4(p_cycle->lfd, (sockaddr *)&ca, &len, SOCK_NONBLOCK)) > 0)
 	{
 		// printf("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
 		connection_t* p_conn = new connection_t();
@@ -280,7 +292,7 @@ int accept_handler(connection_t* lc)
 		p_conn->rev.arg 	 = p_conn;
 		p_conn->wev.handler  = empty_handler;
 		p_conn->wev.arg 	 = p_conn;
-		p_conn->cycle        = lc->cycle;
+		p_conn->cycle        = p_cycle;
 
 		ret = set_fd_reuseaddr(fd);
 		if(0 != ret)
@@ -318,12 +330,18 @@ int free_connection(connection_t* c)
 }
 
 //解析buffer，直到解析完整请求
-int protocol_decoder(buffer_t& in_buffer, int& err)
+int protocol_decoder(connection_t* c, int& err)
 {
-	int buffer_len = in_buffer.readable_size();
-	char buf[buffer_len + 1];
-	buf[buffer_len] = '\0';
-	in_buffer.get_string(buffer_len, buf);
+	buffer_t& in_buffer = c->in_buf;
+	char* eof = in_buffer.find_eof();
+	if(!eof)
+	{
+		return -1;
+	}
+
+	int len = eof - in_buffer.read_begin();
+	// person::Persion person;
+
 
 	return 0;
 }
@@ -334,18 +352,21 @@ int parse_protocol_handler(connection_t* c)
 	int ret = 0;
 	int err = 0;
 	buffer_t& in_buffer = c->in_buf;
-	ret = protocol_decoder(in_buffer, err);
-	if(0 != ret && err == kDECODER_AGAIN)
+	ret = protocol_decoder(c, err);
+	if(0 != ret)
 	{
-		return kDECODER_AGAIN;
+		if(kDECODER_AGAIN == err)
+		{
+			return kDECODER_AGAIN;
+		}
+		
+		if(kDECODER_ERROR == err)
+		{
+			return kDECODER_ERROR;
+		}
 	}
 
-	if(0 != ret && err == kDECODER_ERROR)
-	{
-		return kDECODER_ERROR;
-	}
-
-
+	/* 解析出完整的请求 */
 
 	return 0;
 }
@@ -380,7 +401,7 @@ int read_handler(connection_t* c)
 			return kBUFFER_EAGAIN;
 		}
 		
-		/* 其他错误直接释放链接 */
+		/* kBUFFER_ERROR 其他错误直接释放链接 */
 		printf("buf read error, ret:[%d] errno msg:[%s]\n", ret, strerror(errno));
 		free_connection(c);	
 
@@ -442,13 +463,6 @@ int write_handler(connection_t* c)
 
 	return ret;
 }
-
-
-
-typedef list<task_t>		timer_task_queue_t;
-typedef list<task_t>		io_task_queue_t;
-typedef list<task_t>		accept_task_queue_t;
-typedef map<uint64_t, list<task_t>>	timer_queue_t;
 
 static uint64_t get_curr_msec()
 {
@@ -572,12 +586,11 @@ static int work_process_cycle()
 	int ret = 0;
 	int cnt = 0;
 	int64_t timer = -1;
-		
-	timer_task_queue_t 		timer_task_queue;
-	timer_queue_t 			timer_queue;
-	io_task_queue_t 		io_task_queue;
-	accept_task_queue_t 	accept_task_queue;
-
+	
+	timer_queue_t& timer_queue             = cycle.timer_queue;
+	io_task_queue_t& io_task_queue         = cycle.io_task_queue;
+	accept_task_queue_t& accept_task_queue = cycle.accept_task_queue;
+	timer_task_queue_t timer_task_queue;
 
 	pid_t id = gettid();
 	printf("work process id:%d\n", id);
@@ -588,7 +601,7 @@ static int work_process_cycle()
 	cycle.efd = efd;
 
 	connection_t* p_conn = new connection_t();
-	p_conn->fd = lfd;
+	p_conn->fd = cycle.lfd;
 	p_conn->rev.handler = accept_handler;
 	p_conn->rev.arg = p_conn;
 
@@ -758,19 +771,19 @@ static int32_t Init()
 
 	printf("AF_INET:[%d], SOCK_STREAM:[%d]\n", AF_INET, SOCK_STREAM);
 
-	lfd = socket(AF_INET, SOCK_STREAM, 0);
+	cycle.lfd = socket(AF_INET, SOCK_STREAM, 0);
 
-	ret = set_fd_reuseaddr(lfd);
+	ret = set_fd_reuseaddr(cycle.lfd);
 	if(0 != ret)
 	{
 		printf("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
 		return -1;
 	}
 
-    ret = set_fd_noblock(lfd);
+    ret = set_fd_noblock(cycle.lfd);
 	if(0 != ret)
 	{
-		printf("set lfd[%d] failed\n", lfd);
+		printf("set lfd[%d] failed\n", cycle.lfd);
 	}
 
 	struct sockaddr_in addr;
@@ -781,26 +794,40 @@ static int32_t Init()
 	addr.sin_port 			= htons(PORT);
 	addr.sin_addr.s_addr   	= INADDR_ANY;
 	
-	ret = bind(lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
+	ret = bind(cycle.lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
 	if(0 != ret)
 	{
-		printf("process[%d] bind lfd[%d] failed, errno msg:[%s]\n", id, lfd, strerror(errno));
+		printf("process[%d] bind lfd[%d] failed, errno msg:[%s]\n", id, cycle.lfd, strerror(errno));
 		exit(ret);
 	}
 
-	printf("process[%d] bind lfd[%d] sucess\n", id, lfd);
+	printf("process[%d] bind lfd[%d] sucess\n", id, cycle.lfd);
 
-	ret = listen(lfd, LISTEN_SIZE);
+	ret = listen(cycle.lfd, LISTEN_SIZE);
 	if(0 != ret)
 	{
-		printf("process[%d] listen lfd[%d] failed\n", id, lfd);
+		printf("process[%d] listen lfd[%d] failed\n", id, cycle.lfd);
 		exit(ret);
 	}
 
-	cycle.lfd = lfd;
-
-	printf("process[%d] listen lfd[%d] sucess\n", id, lfd);
+	printf("process[%d] listen lfd[%d] sucess\n", id, cycle.lfd);
 	return 0;
+}
+
+int daemonize()
+{
+	int fd;
+	
+	if(0 != fork()) exit(0); //parent exit
+	setsid(); //create a new session
+
+	if((fd = open("/dev/null", O_RDWR, 0)) != -1)
+	{
+		dup2(fd, STDIN_FILENO);
+		dup2(fd, STDOUT_FILENO);
+		dup2(fd, STDERR_FILENO);
+		if (fd > STDERR_FILENO) close(fd);
+	}
 }
 
 int32_t main(int32_t argc, char* argv[])
@@ -829,6 +856,9 @@ int32_t main(int32_t argc, char* argv[])
 	// //主进程
 	// master_process_cycle();
 
+	/* 后台进程 */
+	// daemonize();
+	
 	work_process_cycle();
 
 
