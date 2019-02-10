@@ -4,7 +4,7 @@ void log::level_log_raw(const char* msg)
 {
 	FILE *fp;
 
-	fp = fopen("log", "a");
+	fp = fopen(log_path, "a");
 	if(!fp) return;
 
 	fprintf(fp,"%s", msg);

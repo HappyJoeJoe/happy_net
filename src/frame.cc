@@ -43,7 +43,10 @@ using namespace std;
 #define RETURN_CHECK(RET) \
 	if(0 != RET) return RET;
 
-#define info_log(fmt, ...) ser.g_log.level_log(kLOG_INFO, fmt, ##__VA_ARGS__)
+#define debug_log(fmt, ...) ser.g_log.level_log(kLOG_DEBUG, fmt, ##__VA_ARGS__)
+#define info_log(fmt, ...)  ser.g_log.level_log(kLOG_INFO,  fmt, ##__VA_ARGS__)
+#define warn_log(fmt, ...)  ser.g_log.level_log(kLOG_WARN,  fmt, ##__VA_ARGS__)
+#define err_log(fmt, ...)   ser.g_log.level_log(kLOG_ERR,   fmt, ##__VA_ARGS__)
 
 
 typedef class log        	log_t;
@@ -169,10 +172,8 @@ int set_fd_cloexec(int fd)
 	return 0;
 }
 
-/* 
- * 1. so_reuseaddr 允许处于[time_wait]的socket重复可用
- * 2. 允许同一端口绑定多个实例，只要每个实例绑定本地ip地址不同即可
- */
+/* 1. so_reuseaddr 允许处于[time_wait]的socket重复可用
+ * 2. 允许同一端口绑定多个实例，只要每个实例绑定本地ip地址不同即可 */
 int set_fd_reuseaddr(int fd)
 {
 	int yes = 1;
@@ -295,7 +296,7 @@ int epoll_del_listen(connection_t* c, int ep_fd, int listen_fd)
 
 int accept_handler(connection_t* lc)
 {
-	//如果是监听事件，优先处理
+	/* 如果是监听事件，优先处理 */
 	int ret = 0;
 	cycle_t* p_cycle = lc->cycle;
 	event_t* p_rev   = &lc->rev;
@@ -338,6 +339,7 @@ int init_request()
 /* 一个稍微复杂的过程 */
 int free_connection(connection_t* c)
 {
+	info_log("I'm done!\n");
 	cycle_t* cycle = c->cycle;
 	int efd 	   = cycle->efd;
 	int fd         = c->fd;
@@ -351,7 +353,7 @@ int free_connection(connection_t* c)
 	return 0;
 }
 
-//解析buffer，直到解析完整请求
+/* 解析buffer，直到解析完整请求 */
 int protocol_decoder(connection_t* c, int& err)
 {
 	buffer_t& in_buffer = c->in_buf;
@@ -452,7 +454,7 @@ int read_handler(connection_t* c)
 	}
 	else
 	{
-		//如果（没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1）
+		/* 如果（没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1）*/
 		free_connection(c);
 		//否则
 		c->stop = 1;
@@ -616,7 +618,7 @@ static int work_process_cycle()
 
 	pid_t id = gettid();
 	info_log("work process id:%d\n", id);
-	//todo 子进程搞事情
+	/* todo 子进程搞事情 */
 	int efd = epoll_create(1024);
 
 	// cycle.lfd = lfd;
@@ -716,17 +718,12 @@ static int work_process_cycle()
 			connection_t* c 		= (connection_t *)ee->data.ptr;
 			int fd 					= c->fd;
 
-			info_log("loc:[%s] line:[%d] fd[%d] EPOLLIN:[%d], EPOLLOUT:[%d], EPOLLRDHUP:[%d]\n", 
-				__func__, __LINE__, c->fd, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
+			// info_log("loc:[%s] line:[%d] fd[%d] EPOLLIN:[%d], EPOLLOUT:[%d], EPOLLRDHUP:[%d]\n", 
+			// 	__func__, __LINE__, c->fd, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
 
 			if(events & EPOLLRDHUP)
 			{
-				ret = epoll_ctl(efd, EPOLL_CTL_DEL, c->fd, ee);
-				if(0 != ret)
-				{
-					info_log("epoll_ctl del err, fd[%d], ret[%d]\n", c->fd, ret);
-				}
-				close(c->fd);
+				free_connection(c);
 				continue;
 			}
 
@@ -759,7 +756,7 @@ static int work_process_cycle()
 			if(events & EPOLLOUT)
 			{
 				// info_log("写事件\n");
-				//加入写事件队列
+				/* 加入写事件队列 */
 				task_t task;
 				task.handler = (void *)c->wev.handler;
 				task.arg = (void *)c;
@@ -776,7 +773,7 @@ static int32_t master_process_cycle()
 	info_log("master process id:%d\n", id);
 	// close(lfd);
 	// info_log("master close lfd\n");
-	//todo master搞事情
+	/* todo master搞事情 */
 	while(1)
 	{
 		sleep(3);
@@ -832,8 +829,7 @@ static int Init()
 		exit(ret);
 	}
 
-	// ser.g_log = new log();
-	ser.g_log.set_log_path("");
+	ser.g_log.set_log_path("ser.log");
 
 	info_log("process[%d] listen lfd[%d] sucess\n", id, cycle.lfd);
 	return 0;
@@ -843,8 +839,8 @@ int daemonize()
 {
 	int fd;
 	
-	if(0 != fork()) exit(0); //parent exit
-	setsid(); //create a new session
+	if(0 != fork()) exit(0); /* parent exit */
+	setsid(); /* create a new session */
 
 	/* /dev/null是一个无底洞，丢弃一切写入的任何东西，读取它会返回一个EOF */
 	if((fd = open("/dev/null", O_RDWR, 0)) != -1)
@@ -874,7 +870,7 @@ int main(int32_t argc, char* argv[])
 	// 			info_log("fork error!\n");
 	// 			break;
 	// 		case 0:
-	// 			//子进程
+	// 			/* 子进程 */
 	// 			work_process_cycle();
 	// 			return 0;
 	// 		default:
@@ -882,7 +878,7 @@ int main(int32_t argc, char* argv[])
 	// 	}
 	// }
 
-	// //主进程
+	/* 主进程 */
 	// master_process_cycle();
 
 	/* 后台进程 */
