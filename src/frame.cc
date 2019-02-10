@@ -339,7 +339,6 @@ int init_request()
 /* 一个稍微复杂的过程 */
 int free_connection(connection_t* c)
 {
-	info_log("I'm done!\n");
 	cycle_t* cycle = c->cycle;
 	int efd 	   = cycle->efd;
 	int fd         = c->fd;
