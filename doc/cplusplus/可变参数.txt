@@ -1,0 +1,27 @@
+#include <iostream>
+using namespace std;
+
+//递归终止函数
+void debug()
+{
+    cout << "empty\n";
+}
+
+//展开函数
+template <class T, class ... Args>
+void debug(T first, Args ... last)
+{
+    cout << "parameter " << first << endl;
+    debug(last...);
+}
+
+int main()
+{
+    debug(1, 2, 3, 4);
+
+    return 0;
+}
+--------------------- 
+
+宏: __VAR_ARGS__ 用来表示宏定义中可变参数，在之前添加 ## 表示当可变参数为空时，没有参数省去可变参数之前的‘,’（逗号）
+#define printf(fmt, ...) my_print(fmt, #__VAR_ARGS__)

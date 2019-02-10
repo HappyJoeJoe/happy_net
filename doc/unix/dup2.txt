@@ -1,0 +1,5 @@
+int dup2(int oldfd, int newfd)
+
+1. 为 oldfd 创建新的文件描述符副本，并将其编号命名为 newfd
+2. 若 newfd 所指定的描述符之前已开启，则 dup2 先将其关闭
+3. 调用成功，返回 newfd，失败 -1

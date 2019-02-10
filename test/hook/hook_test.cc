@@ -42,19 +42,7 @@ int main()
 	*p = 4;
 	free(p);
 	*/
-	if(1)
-	{
-		printf("1\n");
-	}
-
-	if(0)
-	{
-		printf("0\n");
-	}
-
-	if(-1)
-	{
-		printf("-1\n");
-	}
+	
+	printf("%s\n", "\e[1;32m显示的文字\e[0m");
 	return 0;
 }
