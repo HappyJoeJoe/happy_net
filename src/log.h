@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#define LOG_MAX_LEN 1024
+
 /* 日志等级 */
 enum log_level
 {
@@ -11,8 +13,6 @@ enum log_level
 	kLOG_WARN       = 3,
 	kLOG_ERR        = 4,
 };
-
-#define LOG_MAX_LEN 1024
 
 class log
 {

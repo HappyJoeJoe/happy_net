@@ -38,6 +38,9 @@ using namespace std;
 #define READ_EVENT 		 (1 << 0)
 #define WRITE_EVENT 	 (1 << 1)
 
+#define MASTER           (1 << 0) /* master 实例 */
+#define SLAVE            (1 << 1) /* slave  实例 */
+
 // #define gettid() syscall(SYS_gettid)  
 
 #define RETURN_CHECK(RET) \
@@ -62,10 +65,12 @@ typedef struct task_s
 	int   type;
 } task_t;
 
+
 typedef list<task_t>		timer_task_queue_t;
 typedef list<task_t>		io_task_queue_t;
 typedef list<task_t>		accept_task_queue_t;
-typedef map<uint64_t, list<task_t>>	timer_queue_t;
+typedef map<uint64_t, list<task_t>>	  timer_queue_t;
+typedef map<long long, connection_t>  client_dict;
 
 
 int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
@@ -91,6 +96,7 @@ typedef struct cycle_s
 	int   efd; /* epoll fd */
 	int   lfd; /* listen fd，暂时放在cycle_t里，之后放在 */
 
+	client_dict             cli_dict;    /* client 字典 */
 	timer_queue_t 			timer_queue; /* 定时器存储队列 */
 	io_task_queue_t 		io_task_queue; /* IO网络事件任务队列 */
 	accept_task_queue_t 	accept_task_queue; /* accept事件任务队列 */
@@ -107,6 +113,7 @@ typedef struct request_s
 /* 客户端链接 */
 typedef struct connection_s
 {
+	long long id;       /* 客户端id */
 	int fd;			    /* 套接字 */
 	int mask;           /* 事件类型掩码 */
 	
@@ -129,16 +136,16 @@ typedef struct connection_s
 
 typedef struct server
 {
-	pid_t pid; /* 进程pid */
-	int port;  /* 绑定端口 */
-	char* conf_path; /* 配置文件 */
-	char* log_path;  /* 日志文件 */
-	log_t  g_log;     /* 日志 */
-	cycle_t* cycle_p;/* 事件循环结构体 */
-	char* bind_addr[16];/* 端口绑定的本地IP列表 */
-	int*  bind_count;   /* 实际绑定本地IP列表数( <= 16) */
-	int daemonize:1;   /* 是否后台模式 */
-
+	pid_t     pid;       /* 进程pid */
+	int       port;      /* 绑定端口 */
+	char*     conf_path; /* 配置文件 */
+	char*     log_path;  /* 日志文件 */
+	log_t     g_log;     /* 日志 */
+	cycle_t*  cycle_p;   /* 事件循环结构体 */
+	char*     bind_addr[16];/* 端口绑定的本地IP列表 */
+	int*      bind_count;   /* 实际绑定本地IP列表数( <= 16) */
+	int       daemonize:1;   /* 是否后台模式 */
+	int       type;      /* server类型，eg: master or slave */
 } server;
 
 server ser;
@@ -348,6 +355,20 @@ int free_connection(connection_t* c)
 
 	//如果没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1
 	delete c;
+
+	return 0;
+}
+
+/* 读取到client关闭写端，而此时server端还有数据，则连接处于半关闭状态 */
+int half_close(int fd)
+{
+	int ret = 0;
+	ret = shutdown(fd, SHUT_WR);
+	if(-1 == ret)
+	{
+		info_log("shutdown failed, errno msg:%s", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }

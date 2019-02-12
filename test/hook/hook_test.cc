@@ -10,7 +10,10 @@
 
 typedef void *(*p_malloc_t)(size_t);
 
-
+/* 在文件里已声明了 malloc 函数，而该函数名即是一个全局符号。
+ * 链接阶段，ld 链接器会把该符号加载进全局符号表。由于全局符号介
+ * 入，glibc中的malloc符号遇到一个已存在的符号将被忽略。而dlsym
+ * 的 RTLD_NEXT 会得到下一次遇到的符号的地址，即glibc中的地址。*/
 void *malloc(size_t size)
 {
 	static int num = 0;

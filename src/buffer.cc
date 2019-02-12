@@ -13,7 +13,7 @@ int buffer::read_once(int fd, char* buf, int size)
 			err = errno;
 			if(EAGAIN == err)
 			{
-				// printf("%s|%s|%d  EAGAIN  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
+				// info_log("%s|%s|%d  EAGAIN  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
 				return kBUFFER_EAGAIN;
 			}
 			else if(EINTR == err)
@@ -26,7 +26,7 @@ int buffer::read_once(int fd, char* buf, int size)
 		}
 		else if(n_read >= 0)
 		{
-			// printf("%s|%s|%d  n_read >= 0  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
+			// info_log("%s|%s|%d  n_read >= 0  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
 			break;
 		}
 		
@@ -45,7 +45,7 @@ int buffer::read_buf(int fd, int& err)
 		ret = read_once(fd, write_begin(), writable_size());
 		if(kBUFFER_ERROR == ret)
 		{
-			// printf("%s->%s:%d  fd:%d  read error\n", __FILE__, __func__, __LINE__, fd);
+			// info_log("%s->%s:%d  fd:%d  read error\n", __FILE__, __func__, __LINE__, fd);
 			err = kBUFFER_ERROR;
 			return -1;
 		}
@@ -58,7 +58,7 @@ int buffer::read_buf(int fd, int& err)
 				break;
 			}
 
-			// printf("%s->%s:%d  fd:%d  EAGAIN \n", __FILE__, __func__, __LINE__, fd);
+			// info_log("%s->%s:%d  fd:%d  EAGAIN \n", __FILE__, __func__, __LINE__, fd);
 			return -1;
 		}
 		else if(ret == 0)
@@ -103,26 +103,24 @@ int buffer::write_once(int fd, int& err)
 			err = errno;
 			if(EAGAIN == err)
 			{
-				// printf("[%s->%s:%d]  EAGAIN  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
+				// info_log("[%s->%s:%d]  EAGAIN  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
 				err = kBUFFER_EAGAIN;
 				return -1;
 			}
 			else if(EINTR == err)
 			{
-				// printf("[%s->%s:%d]  EINTR  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
+				// info_log("[%s->%s:%d]  EINTR  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
 			}
 			else
 			{
 				err = kBUFFER_ERROR;
-
-				// printf("[%s->%s:%d]  kBUFFER_ERROR  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
-
+				// info_log("[%s->%s:%d]  kBUFFER_ERROR  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
 				return -1;
 			}
 		}
 		else if(n_write >= 0)
 		{
-			// printf("[%s->%s:%d]  ======>  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
+			// info_log("[%s->%s:%d]  ======>  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
 			set_read_idx(n_write);
 			break;
 		}
