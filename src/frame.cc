@@ -69,8 +69,8 @@ typedef struct task_s
 typedef list<task_t>		timer_task_queue_t;
 typedef list<task_t>		io_task_queue_t;
 typedef list<task_t>		accept_task_queue_t;
-typedef map<uint64_t, list<task_t>>	  timer_queue_t;
-typedef map<long long, connection_t>  client_dict;
+typedef map<uint64_t, list<task_t>>	   timer_queue_t;
+typedef map<long long, connection_t*>  client_dict;
 
 
 int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
@@ -881,32 +881,30 @@ int main(int32_t argc, char* argv[])
 	RETURN_CHECK(ret);
 	info_log("cpu_num=%d\n", cpu_num);
 
-	// for (int32_t i = 0; i < cpu_num; ++i)
-	// {
-	// 	pid_t pid = fork();
-	// 	switch(pid)
-	// 	{
-	// 		case -1:
-	// 			info_log("fork error!\n");
-	// 			break;
-	// 		case 0:
-	// 			/* 子进程 */
-	// 			work_process_cycle();
-	// 			return 0;
-	// 		default:
-	// 			break;
-	// 	}
-	// }
+	for (int32_t i = 0; i < cpu_num; ++i)
+	{
+		pid_t pid = fork();
+		switch(pid)
+		{
+			case -1:
+				info_log("fork error!\n");
+				break;
+			case 0:
+				/* 子进程 */
+				work_process_cycle();
+				return 0;
+			default:
+				break;
+		}
+	}
 
 	/* 主进程 */
-	// master_process_cycle();
+	master_process_cycle();
 
 	/* 后台进程 */
 	// daemonize();
 	
-	work_process_cycle();
-
-
+	// work_process_cycle();
 	
 	return 0;
 }
