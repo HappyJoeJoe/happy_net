@@ -31,6 +31,11 @@ for (int i = 0; i < 2; ++i)
 	fork();
 	// printf("-\n"); /* 6个 - */
 	// printf("-");   /* 8个 - */
+
+	wait(NULL);
+	wait(NULL);
+
+	return 0;
 }
 
 因为 printf 是行缓冲，fork之后子进程会复制父进程的缓冲区，如果每次fork后不及时打印printf，则下一次fork会复制上一次的缓冲区
