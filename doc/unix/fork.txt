@@ -9,20 +9,31 @@ nginx创建master，slave模式下的进程模型
 for(int i = 0; i < cpu_num; i++)
 {
 	pid_t pid = fork();
-	if(pid == 0) /* 子进程 */
+	switch(pid)
 	{
-		proc(); /* 执行子进程逻辑 */
-		break;
-	}
-	else if(pid > 0) /* 父进程 */
-	{
-		break;
-	}
-	else
-	{
-		printf("fork failed, errno msg:%s\n", strerror(errno));
+		case -1:
+			printf("fork failed, errno msg:%s\n", strerrno(errno));
+			break;
+		case 0:
+			printf("子进程\n");
+			while(1)
+			{
+				sleep(3);
+			}
+			break;
+		/* 父进程直接跳出该switch后继续执行for循环继续fork出下一个子进程 */
+		default:
+			break;
 	}
 }
+
+printf("父进程\n");
+while(1)
+{
+	sleep(3);
+}
+
+最终的进程数是 cpu_num + 1
 
 --------------------------------------------------------------------------------------------------------------------------------
 
