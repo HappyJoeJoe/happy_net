@@ -666,7 +666,7 @@ static int work_process_cycle()
 
 	uint64_t now = get_curr_msec();
 
-	/* 定时器 */
+	/* 定时器逻辑，已隐去，若开启去掉注释即可 */
 	// add_every_timer(timer_queue, 3, 2, tmp_timer, NULL);
 
 	while(1)
@@ -881,30 +881,31 @@ int main(int32_t argc, char* argv[])
 	RETURN_CHECK(ret);
 	info_log("cpu_num=%d\n", cpu_num);
 
-	for (int32_t i = 0; i < cpu_num; ++i)
-	{
-		pid_t pid = fork();
-		switch(pid)
-		{
-			case -1:
-				info_log("fork error!\n");
-				break;
-			case 0:
-				/* 子进程 */
-				work_process_cycle();
-				return 0;
-			default:
-				break;
-		}
-	}
+	/* 为方便调试work进程，暂时先把work进程逻辑放在main流程上 */
+	// for (int32_t i = 0; i < cpu_num; ++i)
+	// {
+	// 	pid_t pid = fork();
+	// 	switch(pid)
+	// 	{
+	// 		case -1:
+	// 			info_log("fork error!\n");
+	// 			break;
+	// 		case 0:
+	// 			/* 子进程 */
+	// 			work_process_cycle();
+	// 			return 0;
+	// 		default:
+	// 			break;
+	// 	}
+	// }
 
 	/* 主进程 */
-	master_process_cycle();
+	// master_process_cycle();
 
 	/* 后台进程 */
 	// daemonize();
 	
-	// work_process_cycle();
+	work_process_cycle();
 	
 	return 0;
 }
