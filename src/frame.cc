@@ -64,7 +64,7 @@ typedef list<task_t>		io_task_queue_t;
 typedef list<task_t>		accept_task_queue_t;
 typedef vector<struct  epoll_event>    epoll_event_vec_t;
 typedef map<uint64_t,  list<task_t>>   timer_queue_t;
-typedef map<long long, connection_t*>  client_dict_t;
+typedef map<long long, connection_t*>  client_dict_t; //智能指针
 
 typedef struct task_s
 {
@@ -124,7 +124,7 @@ typedef struct connection_s
 	event_t rev;	    /* 读事件 */
 	event_t wev;	    /* 写事件 */
 
-	cycle_t* cycle;     /* 对应的事件循环结构体 */
+	cycle_t* cycle_p;     /* 对应的事件循环结构体 */
 
 	int active:1; 	    /* 链接是否已加入epoll队列中 */
 	int accept:1; 	    /* 是否用于监听套接字 */
@@ -138,8 +138,8 @@ typedef struct server
 	int       port;      /* 绑定端口 */
 	char*     conf_path; /* 配置文件 */
 	char*     log_path;  /* 日志文件 */
-	log_t     g_log;     /* 日志 */
-	cycle_t*  cycle_p;   /* 事件循环结构体 */
+	log_t     g_log;     /* 日志，智能指针 */
+	cycle_t*  cycle_p;   /* 事件循环结构体，智能指针 */
 	char*     bind_addr[16];/* 端口绑定的本地IP列表 */
 	int*      bind_count;   /* 实际绑定本地IP列表数( <= 16) */
 	int       daemonize:1;   /* 是否后台模式 */
@@ -303,25 +303,25 @@ int accept_handler(connection_t* lc)
 {
 	/* 如果是监听事件，优先处理 */
 	int ret = 0;
-	cycle_t* p_cycle = lc->cycle;
+	cycle_t* cycle_p = lc->cycle_p;
 	event_t* p_rev   = &lc->rev;
-	int efd 	     = p_cycle->efd;
+	int efd 	     = cycle_p->efd;
 
 	struct sockaddr_in ca;
 	socklen_t len = sizeof(ca);
 
 	int fd = 0;
-	while((fd = accept4(p_cycle->lfd, (sockaddr *)&ca, &len, SOCK_NONBLOCK)) > 0)
+	while((fd = accept4(cycle_p->lfd, (sockaddr *)&ca, &len, SOCK_NONBLOCK)) > 0)
 	{
 		// info_log("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
 		connection_t* p_conn = new connection_t();
-		p_conn->id           = p_cycle->next_client_id++;
+		p_conn->id           = cycle_p->next_client_id++;
 		p_conn->fd 			 = fd;
 		p_conn->rev.handler  = read_handler;
 		p_conn->rev.arg 	 = p_conn;
 		p_conn->wev.handler  = empty_handler;
 		p_conn->wev.arg 	 = p_conn;
-		p_conn->cycle        = p_cycle;
+		p_conn->cycle_p      = cycle_p;
 
 		ret = set_fd_reuseaddr(fd);
 		if(0 != ret)
@@ -332,7 +332,7 @@ int accept_handler(connection_t* lc)
 
 		epoll_add_event(p_conn, efd, p_conn->fd, READ_EVENT);
 
-		p_cycle->cli_dict[p_conn->id] = p_conn;
+		cycle_p->cli_dict[p_conn->id] = p_conn;
 	}
 
 	return 0;
@@ -347,12 +347,12 @@ int init_request()
 /* 一个稍微复杂的过程 */
 int free_connection(connection_t* c)
 {
-	cycle_t* p_cycle = c->cycle;
-	int efd 	     = p_cycle->efd;
+	cycle_t* cycle_p = c->cycle_p;
+	int efd 	     = cycle_p->efd;
 	int fd           = c->fd;
 	int id           = c->fd;
 
-	p_cycle->cli_dict.erase(id);
+	cycle_p->cli_dict.erase(id);
 	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
 	close(fd);
 
@@ -431,8 +431,8 @@ int client_handler(connection_t* c)
 
 int read_handler(connection_t* c)
 {
-	cycle_t* cycle = c->cycle;
-	int efd 	   = cycle->efd;
+	cycle_t* cycle_p = c->cycle_p;
+	int efd 	     = cycle_p->efd;
 
 	event_t* p_rev = &c->rev;
 	buffer_t& in_buffer = c->in_buf;
@@ -656,7 +656,7 @@ static int work_process_cycle()
 	p_conn->wev.handler = empty_handler;
 	p_conn->wev.arg = NULL;
 
-	p_conn->cycle = &cycle;
+	p_conn->cycle_p = &cycle;
 	p_conn->accept = 1;
 
 	ret = epoll_add_listen(p_conn, efd, p_conn->fd);
