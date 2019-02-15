@@ -29,10 +29,10 @@
 
 using namespace std;
 
-#define PORT 			8888
-#define EPOLL_SIZE 		1024
-#define LISTEN_SIZE 	256
-#define TIME_OUT 		3
+#define PORT 			8888        /* to configure */
+#define EPOLL_SIZE 		1024        /* to configure */
+#define LISTEN_SIZE 	256         /* to configure */
+#define TIME_OUT 		3           /* to configure */
 #define STRING_EOF      '\0'
 
 #define READ_EVENT 		 (1 << 0)
@@ -54,9 +54,17 @@ using namespace std;
 
 typedef class log        	log_t;
 typedef class buffer        buffer_t;
+typedef struct task_s       task_t;
 typedef struct connection_s connection_t;
 typedef int (*event_handler)(connection_t *);
 typedef void (*timer_func)(void *);
+
+typedef list<task_t>		timer_task_queue_t;
+typedef list<task_t>		io_task_queue_t;
+typedef list<task_t>		accept_task_queue_t;
+typedef vector<struct  epoll_event>    epoll_event_vec_t;
+typedef map<uint64_t,  list<task_t>>   timer_queue_t;
+typedef map<long long, connection_t*>  client_dict_t;
 
 typedef struct task_s
 {
@@ -64,18 +72,6 @@ typedef struct task_s
 	void* arg;
 	int   type;
 } task_t;
-
-
-typedef list<task_t>		timer_task_queue_t;
-typedef list<task_t>		io_task_queue_t;
-typedef list<task_t>		accept_task_queue_t;
-typedef map<uint64_t, list<task_t>>	   timer_queue_t;
-typedef map<long long, connection_t*>  client_dict;
-
-
-int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
-int32_t process;
-// int lfd;
 
 typedef struct event_s
 {
@@ -93,13 +89,15 @@ typedef struct ip_addr
 /* 事件循环体 */
 typedef struct cycle_s
 {
-	int   efd; /* epoll fd */
-	int   lfd; /* listen fd，暂时放在cycle_t里，之后放在 */
-
-	client_dict             cli_dict;    /* client 字典 */
+	int   efd;     /* epoll fd */
+	int   lfd;     /* listen fd，暂时放在cycle_t里，之后放在 */
+	int   max_fd;  /* 迄今为止注册的最大fd */
+	unsigned long long      next_client_id; /* 生成客户端id */
+	client_dict_t           cli_dict;    /* client 字典 */
 	timer_queue_t 			timer_queue; /* 定时器存储队列 */
 	io_task_queue_t 		io_task_queue; /* IO网络事件任务队列 */
 	accept_task_queue_t 	accept_task_queue; /* accept事件任务队列 */
+	epoll_event_vec_t       ee_vec;
 } cycle_t;
 
 /* 客户端请求完整请求体 */
@@ -317,6 +315,7 @@ int accept_handler(connection_t* lc)
 	{
 		// info_log("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
 		connection_t* p_conn = new connection_t();
+		p_conn->id           = p_cycle->next_client_id++;
 		p_conn->fd 			 = fd;
 		p_conn->rev.handler  = read_handler;
 		p_conn->rev.arg 	 = p_conn;
@@ -332,6 +331,8 @@ int accept_handler(connection_t* lc)
 		}
 
 		epoll_add_event(p_conn, efd, p_conn->fd, READ_EVENT);
+
+		p_cycle->cli_dict[p_conn->id] = p_conn;
 	}
 
 	return 0;
@@ -346,10 +347,12 @@ int init_request()
 /* 一个稍微复杂的过程 */
 int free_connection(connection_t* c)
 {
-	cycle_t* cycle = c->cycle;
-	int efd 	   = cycle->efd;
-	int fd         = c->fd;
+	cycle_t* p_cycle = c->cycle;
+	int efd 	     = p_cycle->efd;
+	int fd           = c->fd;
+	int id           = c->fd;
 
+	p_cycle->cli_dict.erase(id);
 	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
 	close(fd);
 
@@ -490,7 +493,7 @@ int write_empty_handler(connection_t* c)
 }
 
 /* 执行用户请求后，开始对客户端写数据，若写不完，则开始对写事件设置write_handler 
-   如果写完以后，要置 write_handler 为 emtpy_handler，否则有可能写事件再次出发 */
+   如果写完以后，要置 write_handler 为 emtpy_handler，否则有可能写事件再次触发 */
 int write_handler(connection_t* c)
 {
 	int err = 0;
@@ -634,12 +637,13 @@ static int work_process_cycle()
 	timer_queue_t& timer_queue             = cycle.timer_queue;
 	io_task_queue_t& io_task_queue         = cycle.io_task_queue;
 	accept_task_queue_t& accept_task_queue = cycle.accept_task_queue;
+	epoll_event_vec_t& ee_vec              = cycle.ee_vec;
 	timer_task_queue_t timer_task_queue;
 
 	pid_t id = gettid();
 	info_log("work process id:%d\n", id);
 	/* todo 子进程搞事情 */
-	int efd = epoll_create(1024);
+	int efd = epoll_create1(0);
 
 	// cycle.lfd = lfd;
 	cycle.efd = efd;
@@ -662,7 +666,7 @@ static int work_process_cycle()
 		return -1;
 	}
 
-	vector<struct epoll_event> ee_vec(EPOLL_SIZE);
+	// vector<struct epoll_event> ee_vec(EPOLL_SIZE);
 
 	uint64_t now = get_curr_msec();
 
@@ -734,7 +738,7 @@ static int work_process_cycle()
 		for (int i = 0; i < cnt; ++i)
 		{
 			struct epoll_event* ee 	= &ee_vec[i];
-			uint32_t events 		= ee->events;
+			uint events 		    = ee->events;
 			connection_t* c 		= (connection_t *)ee->data.ptr;
 			int fd 					= c->fd;
 
@@ -784,10 +788,11 @@ static int work_process_cycle()
 			}
 		}
 	}
+
 	return 0;
 }
 
-static int32_t master_process_cycle()
+static int master_process_cycle()
 {
 	pid_t id = gettid();
 	info_log("master process id:%d\n", id);
@@ -799,17 +804,31 @@ static int32_t master_process_cycle()
 		sleep(3);
 		// info_log("master_process_cycle %d\n", id);
 	}
+	
 	return 0;
 }
 
-static int Init()
+/* 安装信号 handler */
+static void init_signal()
 {
-	int ret = 0;
-	int reuseaddr = 1;
+
+}
+
+static void init_log()
+{
+	ser.g_log.set_log_path("ser.log");
+}
+
+static int init_ser()
+{
+	int ret  = 0;
 	pid_t id = gettid();
 
-	info_log("AF_INET:[%d], SOCK_STREAM:[%d]\n", AF_INET, SOCK_STREAM);
+	init_log();
+	init_signal();
 
+	cycle.next_client_id = 1;
+	cycle.ee_vec.resize(EPOLL_SIZE); /* 调节size */
 	cycle.lfd = socket(AF_INET, SOCK_STREAM, 0);
 
 	ret = set_fd_reuseaddr(cycle.lfd);
@@ -849,8 +868,6 @@ static int Init()
 		exit(ret);
 	}
 
-	ser.g_log.set_log_path("ser.log");
-
 	info_log("process[%d] listen lfd[%d] sucess\n", id, cycle.lfd);
 	return 0;
 }
@@ -875,14 +892,16 @@ int daemonize()
 	}
 }
 
-int main(int32_t argc, char* argv[])
+int main(int argc, char* argv[])
 {
-	int ret = Init();
+	int ret = init_ser();
 	RETURN_CHECK(ret);
+
+	int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
 	info_log("cpu_num=%d\n", cpu_num);
 
 	/* 为方便调试work进程，暂时先把work进程逻辑放在main流程上 */
-	// for (int32_t i = 0; i < cpu_num; ++i)
+	// for (int i = 0; i < cpu_num; ++i)
 	// {
 	// 	pid_t pid = fork();
 	// 	switch(pid)

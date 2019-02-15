@@ -1,0 +1,12 @@
+vector 
+
+resize(size_type count): 
+1) 改变的是size
+2) 如果 current size 大于 count，缩减 size 到头 count 个条目
+3) 如果 current size 小于 count，扩大 size 到 count 个
+
+
+reserve(size_type new_cap): 
+1) 改变的是capatity
+2) 增加 capacity 增加到大于等于 new_cap
+3) 如果 new_cap 大于等于当前 capacity，分配新的内存，否则什么也不做 
