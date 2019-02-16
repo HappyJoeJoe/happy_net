@@ -70,7 +70,8 @@ typedef map<long long, connection_t*>  client_dict_t; //智能指针
  * 2. connection_t 兼容 timer
  * 3. connection_t 兼容 stop
  * 4. cycle_t 兼容 stop
- * 5. 完善master流程，兼容子进程通信，子进程死后拉起 */
+ * 5. 完善master流程，兼容子进程通信，子进程死后拉起
+ * 6. 添加配置解析 */
 
 typedef struct task_s
 {
