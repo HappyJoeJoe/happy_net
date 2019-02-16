@@ -164,6 +164,16 @@ public:
 
 	int write_once(int fd, int& err);
 
+	int read_len(size_t len)
+	{
+		set_read_idx(len);
+	}
+
+	int write_len(size_t len)
+	{
+		set_write_idx(len);
+	}
+
 	void debug_info()
 	{
 		cout << "reserve_size:[" << reserve_size << "] "
@@ -173,9 +183,9 @@ public:
 		     << endl;
 	}
 
-	char* find_eof()
+	char* find_eof(const char* eof)
 	{
-		return strstr(read_begin(), "\r\n");
+		return strstr(read_begin(), eof);
 	}
 
 private:

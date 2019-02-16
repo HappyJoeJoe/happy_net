@@ -25,7 +25,7 @@
 #include "error.h"
 
 /* pb */
-// #include "../pb/person.pb.h"
+#include "person.pb.h"
 
 using namespace std;
 
@@ -36,11 +36,11 @@ using namespace std;
 #define TIME_OUT 		3           /* to configure */
 #define STRING_EOF      '\0'
 
-#define READ_EVENT 		 (1 << 0)
-#define WRITE_EVENT 	 (1 << 1)
+#define READ_EVENT 		(1 << 0)
+#define WRITE_EVENT 	(1 << 1)
 
-#define MASTER           (1 << 0) /* master 实例 */
-#define SLAVE            (1 << 1) /* slave  实例 */
+#define MASTER          (1 << 0) /* master 实例 */
+#define SLAVE           (1 << 1) /* slave  实例 */
 
 // #define gettid() syscall(SYS_gettid)  
 
@@ -66,26 +66,31 @@ typedef vector<struct  epoll_event>    epoll_event_vec_t;
 typedef map<uint64_t,  list<task_t>>   timer_queue_t;
 typedef map<long long, connection_t*>  client_dict_t; //智能指针
 
-/* 1. accept 解析对端 ip:port，协议类型
- * 2. 限制描述符分配
- * 3. connection_t 兼容 timer
- * 4. connection_t 兼容 stop
- * 5. cycle_t 兼容 stop
- * 6. 完善master流程，兼容子进程通信，子进程死后拉起
- * 7. 添加配置解析 */
+/*     todo 
+ *  1. accept 解析对端 ip:port，协议类型
+ *  2. 限制描述符分配
+ *  3. connection_t 兼容 timer
+ *  4. connection_t 兼容 stop
+ *  5. cycle_t 兼容 stop
+ *  6. 完善master流程，兼容子进程通信，子进程死后拉起
+ *  7. 添加配置解析
+ *  9. 添加 mysql 访问器
+ * 10. 添加 redis 访问器
+ * 11. 扩展成 c++ */
 
 typedef struct task_s
 {
 	void* handler;
 	void* arg;
-	int   type;
+	// int   type;
 } task_t;
 
+/* 读写时间结构体 */
 typedef struct event_s
 {
-	event_handler handler;
-	void* arg;
-	int   mask;
+	event_handler handler; /* 事件handler */
+	void* arg;             /* handler参数 */
+	// int   mask;            /* 事件类型，READ_EVENT or WRITE_EVENT */
 } event_t;
 
 typedef struct ip_addr
@@ -118,9 +123,15 @@ typedef struct cycle_s
 typedef struct request_s
 {
 	connection_t* c;
-	void* header;
-	void* body;
+	void* data;
 } request_t;
+
+/* 客户端请求完整请求体 */
+typedef struct response_s
+{
+	connection_t* c;
+	void* data;
+} response_t;
 
 /* 客户端链接 */
 typedef struct connection_s
@@ -134,6 +145,9 @@ typedef struct connection_s
 
 	buffer_t in_buf;         /* 网络包读缓冲区 */
 	buffer_t out_buf;        /* 网络包写缓冲区 */
+
+	request_t req;           /* 请求体 */
+	response_t resp;         /* 应答体 */
 
 	event_t rev;	         /* 读事件 */
 	event_t wev;	         /* 写事件 */
@@ -399,17 +413,13 @@ int half_close(int fd)
 int protocol_decoder(connection_t* c, int& err)
 {
 	buffer_t& in_buffer = c->in_buf;
-	char* eof = in_buffer.find_eof();
+	char* eof = in_buffer.find_eof("\r\n");
 	if(!eof)
 	{
 		return -1;
 	}
 
-	int len = eof - in_buffer.read_begin();
-	// person::Persion person;
-
-
-	return 0;
+	return eof - in_buffer.read_begin();
 }
 
 /* 协议解析 */
@@ -433,6 +443,16 @@ int parse_protocol_handler(connection_t* c)
 	}
 
 	/* 解析出完整的请求 */
+	char buf[ret+1];
+	buf[ret] = '\0';
+	in_buffer.get_string(ret, buf);
+	c->req.data = new person::Persion();
+	person::Persion* person_p = (person::Persion*)c->req.data;
+	person_p->ParseFromString(buf);
+	in_buffer.read_len(strlen("\r\n"));
+
+	// info_log("person:%s\n", person.ShortDebugString().c_str());
+	
 
 	return 0;
 }
@@ -442,9 +462,16 @@ int client_handler(connection_t* c)
 {
 	buffer_t& out_buf = c->out_buf;
 
-	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
-	out_buf.append_string(str);
-
+	// const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
+	person::Persion person;
+	person.CopyFrom(*(person::Persion*)c->req.data);
+	// person.set_name("hello world");
+	// person.set_age(1);
+	string str;
+	person.SerializeToString(&str);
+	out_buf.append_string(str.c_str());
+	out_buf.append_string("\r\n");
+	
 	return 0;
 }
 
@@ -778,7 +805,6 @@ static int work_process_cycle()
 
 			if(events & EPOLLIN)
 			{
-				// info_log("读事件\n");
 				if(!c->ready)
 				{
 
@@ -790,7 +816,6 @@ static int work_process_cycle()
 				task.arg = (void *)c;
 
 				if(c->accept)
-				// if(fd == lfd)
 				{
 					// ((event_handler)task.handler)((connection_t *)task.arg);
 					accept_task_queue.push_back(task);
@@ -804,7 +829,6 @@ static int work_process_cycle()
 			
 			if(events & EPOLLOUT)
 			{
-				// info_log("写事件\n");
 				/* 加入写事件队列 */
 				task_t task;
 				task.handler = (void *)c->wev.handler;

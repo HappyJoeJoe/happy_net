@@ -13,6 +13,7 @@
 #include <stdlib.h>
 
 #include "buffer.h"
+#include "person.pb.h"
 
 #define PORT 			8888
 #define IP 				"172.18.185.251"
@@ -40,16 +41,38 @@ int main(int argc, char const *argv[])
 	{
 		int err;
 		buffer_t query_buf;
-		query_buf.append_string("GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n");
+		person::Persion person;
+		person.set_name("jiabo");
+		person.set_age(18);
+
+		string str;
+		person.SerializeToString(&str);
+		query_buf.append_string(str.c_str());
+		query_buf.append_string("\r\n");
+		// query_buf.append_string("GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n");
 		ret = query_buf.write_once(fd, err);
 
 		// sleep(3);
 
 		buffer_t resp_buf;
-		if(ret = resp_buf.read_buf(fd, err))
+		if((ret = resp_buf.read_buf(fd, err)) > 0)
 		{
+			char* eof = resp_buf.find_eof("\r\n");
+			if(!eof)
+			{
+				return -1;
+			}
+			
+			int len = eof - resp_buf.read_begin();
+			char buf[len+1];
+			buf[len] = '\0';
+			resp_buf.get_string(len, buf);
+			person::Persion person;
+			person.ParseFromString(buf);
+			resp_buf.read_len(strlen("\r\n"));
+
 			printf("read -------------------\n");
-			printf("[%s]\n", resp_buf.read_begin());
+			printf("[%s]\n", person.ShortDebugString().c_str());
 		}
 	}
 

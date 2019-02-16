@@ -1,12 +1,12 @@
-syntax = "proto3";
+syntax = "proto2";
 
 package person;
 
 message Persion {
-    string name = 1;
-    int32 age = 2;
+    optional string name = 1;
+    optional int32 age = 2;
 }
 
 message AddressBook {
-    Persion persion = 1;
+    repeated Persion persion = 1;
 }
