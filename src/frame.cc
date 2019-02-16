@@ -52,7 +52,6 @@ using namespace std;
 #define warn_log(fmt, ...)  ser.log_p->level_log(kLOG_WARN,  fmt, ##__VA_ARGS__)
 #define err_log(fmt, ...)   ser.log_p->level_log(kLOG_ERR,   fmt, ##__VA_ARGS__)
 
-
 typedef class log        	log_t;
 typedef class buffer        buffer_t;
 typedef struct task_s       task_t;
@@ -66,6 +65,12 @@ typedef list<task_t>		accept_task_queue_t;
 typedef vector<struct  epoll_event>    epoll_event_vec_t;
 typedef map<uint64_t,  list<task_t>>   timer_queue_t;
 typedef map<long long, connection_t*>  client_dict_t; //智能指针
+
+/* 1. accept 解析对端 ip:port，协议类型
+ * 2. connection_t 兼容 timer
+ * 3. connection_t 兼容 stop
+ * 4. cycle_t 兼容 stop
+ * 5. 完善master流程，兼容子进程通信，子进程死后拉起 */
 
 typedef struct task_s
 {
@@ -85,19 +90,25 @@ typedef struct ip_addr
 {
 	string  ip;
 	int     port;
+	int     proto_type; /* ipv4 还是 ipv6 */
 } ip_addr;
 
 /* 事件循环体 */
 typedef struct cycle_s
 {
 	int   efd;           /* epoll fd */
-	int   lfd;           /* listen fd，暂时放在cycle_t里，之后放在server里 */
-	unsigned long long      next_client_id;    /* 生成客户端id */
-	client_dict_t           cli_dict;          /* client 字典，前期是map，后期演化成vector */
+	int   lfd;           /* listen fd，暂时放在 cycle_t 里，之后放在 server 里 */
+	unsigned long long      next_client_id;    /* 生成客户端 id */
+	client_dict_t           cli_dict;          /* client 字典，前期是map，后期演化成 vec */
+
 	timer_queue_t 			timer_queue;       /* 定时器存储队列 */
-	io_task_queue_t 		io_task_queue;     /* IO网络事件任务队列 */
-	accept_task_queue_t 	accept_task_queue; /* accept事件任务队列 */
-	epoll_event_vec_t       ee_vec;            /* 激活时间vec */
+	timer_task_queue_t      timer_task_queue;  /* 定时器任务队列 */
+
+	io_task_queue_t 		io_task_queue;     /* epoll 激活事件: IO 网络读写事件任务队列 */
+	accept_task_queue_t 	accept_task_queue; /* epoll 激活事件: accept 任务队列 */
+
+	epoll_event_vec_t       ee_vec;            /* 存储所有 epoll 注册事件 */
+
 	int stop:1;          /* 是否停止 */
 } cycle_t;
 
@@ -147,7 +158,7 @@ typedef struct server
 	int       daemonize:1;   /* 是否后台模式 */
 	int       type;          /* bitwise, server类型，eg: master or slave */
 	int       unix_fd;       /* UNIX 域套接字 */
-	char*     unix_path;     /* 路径 */
+	char*     unix_path;     /* 路径: /tmp/happy.sock */
 	int       cpu_num;       /* cpu核数 */
 } server;
 
@@ -438,10 +449,10 @@ int client_handler(connection_t* c)
 int read_handler(connection_t* c)
 {
 	cycle_t* cycle_p = c->cycle_p;
+	event_t* p_rev   = &c->rev;
 	int efd 	     = cycle_p->efd;
-
-	event_t* p_rev = &c->rev;
 	buffer_t& in_buffer = c->in_buf;
+
 	int fd = c->fd;
 	int ret = 0;
 	int err = 0;
@@ -644,7 +655,7 @@ static int work_process_cycle()
 	io_task_queue_t& io_task_queue         = cycle.io_task_queue;
 	accept_task_queue_t& accept_task_queue = cycle.accept_task_queue;
 	epoll_event_vec_t& ee_vec              = cycle.ee_vec;
-	timer_task_queue_t timer_task_queue;
+	timer_task_queue_t& timer_task_queue   = cycle.timer_task_queue;
 
 	pid_t id = gettid();
 	info_log("work process id:%d\n", id);
@@ -681,6 +692,12 @@ static int work_process_cycle()
 
 	while(1)
 	{
+		/* 进程退出 */
+		if(cycle.stop)
+		{
+			//todo
+		}
+
 		/* -------------- accept 事件 -------------- */
 		for_each(accept_task_queue.begin(), accept_task_queue.end(), [](task_t& t) 
 		{
@@ -798,6 +815,26 @@ static int work_process_cycle()
 	return 0;
 }
 
+static int daemonize()
+{
+	int fd;
+	
+	if(0 != fork()) exit(0); /* parent exit */
+	setsid(); /* create a new session */
+
+	/* /dev/null是一个无底洞，丢弃一切写入的任何东西，读取它会返回一个EOF */
+	if((fd = open("/dev/null", O_RDWR, 0)) != -1)
+	{
+		/* dup2 为 /dev/null 指定的描述符fd创建副本，并由newfd指定编号
+		 * 以下说明，fd 由标准输入，标准输出，标准错误输出三个 fd 指定其副本编号，这意味着之后的输入输出都将丢进"垃圾桶"里
+		 * 调用成功后，STDIN_FILENO，STDOUT_FILENO，STDERR_FILENO都指向了 /dev/null */
+		dup2(fd, STDIN_FILENO);
+		dup2(fd, STDOUT_FILENO);
+		dup2(fd, STDERR_FILENO);
+		if (fd > STDERR_FILENO) close(fd);
+	}
+}
+
 static int master_process_cycle()
 {
 	pid_t id = gettid();
@@ -837,6 +874,7 @@ static int init_ser()
 	cycle.next_client_id = 1;
 	cycle.ee_vec.resize(EPOLL_SIZE); /* 调节size */
 	cycle.lfd = socket(AF_INET, SOCK_STREAM, 0);
+	cycle.stop = 0;
 
 	ret = set_fd_reuseaddr(cycle.lfd);
 	if(0 != ret)
@@ -877,26 +915,6 @@ static int init_ser()
 
 	info_log("process[%d] listen lfd[%d] sucess\n", id, cycle.lfd);
 	return 0;
-}
-
-int daemonize()
-{
-	int fd;
-	
-	if(0 != fork()) exit(0); /* parent exit */
-	setsid(); /* create a new session */
-
-	/* /dev/null是一个无底洞，丢弃一切写入的任何东西，读取它会返回一个EOF */
-	if((fd = open("/dev/null", O_RDWR, 0)) != -1)
-	{
-		/* dup2 为 /dev/null 指定的描述符fd创建副本，并由newfd指定编号
-		 * 以下说明，fd 由标准输入，标准输出，标准错误输出三个 fd 指定其副本编号，这意味着之后的输入输出都将丢进"垃圾桶"里
-		 * 调用成功后，STDIN_FILENO，STDOUT_FILENO，STDERR_FILENO都指向了 /dev/null */
-		dup2(fd, STDIN_FILENO);
-		dup2(fd, STDOUT_FILENO);
-		dup2(fd, STDERR_FILENO);
-		if (fd > STDERR_FILENO) close(fd);
-	}
 }
 
 int main(int argc, char* argv[])
