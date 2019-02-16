@@ -67,11 +67,12 @@ typedef map<uint64_t,  list<task_t>>   timer_queue_t;
 typedef map<long long, connection_t*>  client_dict_t; //智能指针
 
 /* 1. accept 解析对端 ip:port，协议类型
- * 2. connection_t 兼容 timer
- * 3. connection_t 兼容 stop
- * 4. cycle_t 兼容 stop
- * 5. 完善master流程，兼容子进程通信，子进程死后拉起
- * 6. 添加配置解析 */
+ * 2. 限制描述符分配
+ * 3. connection_t 兼容 timer
+ * 4. connection_t 兼容 stop
+ * 5. cycle_t 兼容 stop
+ * 6. 完善master流程，兼容子进程通信，子进程死后拉起
+ * 7. 添加配置解析 */
 
 typedef struct task_s
 {
