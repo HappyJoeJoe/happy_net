@@ -29,6 +29,7 @@
 
 using namespace std;
 
+#define OPEN_FD_LIMIT   10000       /* to configure */
 #define PORT 			8888        /* to configure */
 #define EPOLL_SIZE 		1024        /* to configure */
 #define LISTEN_SIZE 	256         /* to configure */
@@ -46,10 +47,10 @@ using namespace std;
 #define RETURN_CHECK(RET) \
 	if(0 != RET) return RET;
 
-#define debug_log(fmt, ...) ser.g_log.level_log(kLOG_DEBUG, fmt, ##__VA_ARGS__)
-#define info_log(fmt, ...)  ser.g_log.level_log(kLOG_INFO,  fmt, ##__VA_ARGS__)
-#define warn_log(fmt, ...)  ser.g_log.level_log(kLOG_WARN,  fmt, ##__VA_ARGS__)
-#define err_log(fmt, ...)   ser.g_log.level_log(kLOG_ERR,   fmt, ##__VA_ARGS__)
+#define debug_log(fmt, ...) ser.log_p->level_log(kLOG_DEBUG, fmt, ##__VA_ARGS__)
+#define info_log(fmt, ...)  ser.log_p->level_log(kLOG_INFO,  fmt, ##__VA_ARGS__)
+#define warn_log(fmt, ...)  ser.log_p->level_log(kLOG_WARN,  fmt, ##__VA_ARGS__)
+#define err_log(fmt, ...)   ser.log_p->level_log(kLOG_ERR,   fmt, ##__VA_ARGS__)
 
 
 typedef class log        	log_t;
@@ -89,15 +90,15 @@ typedef struct ip_addr
 /* 事件循环体 */
 typedef struct cycle_s
 {
-	int   efd;     /* epoll fd */
-	int   lfd;     /* listen fd，暂时放在cycle_t里，之后放在 */
-	int   max_fd;  /* 迄今为止注册的最大fd */
-	unsigned long long      next_client_id; /* 生成客户端id */
-	client_dict_t           cli_dict;    /* client 字典 */
-	timer_queue_t 			timer_queue; /* 定时器存储队列 */
-	io_task_queue_t 		io_task_queue; /* IO网络事件任务队列 */
+	int   efd;           /* epoll fd */
+	int   lfd;           /* listen fd，暂时放在cycle_t里，之后放在server里 */
+	unsigned long long      next_client_id;    /* 生成客户端id */
+	client_dict_t           cli_dict;          /* client 字典，前期是map，后期演化成vector */
+	timer_queue_t 			timer_queue;       /* 定时器存储队列 */
+	io_task_queue_t 		io_task_queue;     /* IO网络事件任务队列 */
 	accept_task_queue_t 	accept_task_queue; /* accept事件任务队列 */
-	epoll_event_vec_t       ee_vec;
+	epoll_event_vec_t       ee_vec;            /* 激活时间vec */
+	int stop:1;          /* 是否停止 */
 } cycle_t;
 
 /* 客户端请求完整请求体 */
@@ -111,39 +112,43 @@ typedef struct request_s
 /* 客户端链接 */
 typedef struct connection_s
 {
-	long long id;       /* 客户端id */
-	int fd;			    /* 套接字 */
-	int mask;           /* 事件类型掩码 */
+	long long id;            /* 客户端id */
+	int fd;			         /* 套接字 */
+	int mask;                /* 事件类型掩码 */
 	
-	ip_addr local_addr; /* 本地地址 */
-	ip_addr peer_addr;  /* 对端地址 */
+	ip_addr local_addr;      /* 本地地址 */
+	ip_addr peer_addr;       /* 对端地址 */
 
-	buffer_t in_buf;    /* 网络包读缓冲区 */
-	buffer_t out_buf;   /* 网络包写缓冲区 */
+	buffer_t in_buf;         /* 网络包读缓冲区 */
+	buffer_t out_buf;        /* 网络包写缓冲区 */
 
-	event_t rev;	    /* 读事件 */
-	event_t wev;	    /* 写事件 */
+	event_t rev;	         /* 读事件 */
+	event_t wev;	         /* 写事件 */
 
-	cycle_t* cycle_p;     /* 对应的事件循环结构体 */
+	cycle_t* cycle_p;        /* 对应的事件循环结构体 */
 
-	int active:1; 	    /* 链接是否已加入epoll队列中 */
-	int accept:1; 	    /* 是否用于监听套接字 */
-	int ready:1;  	    /* 第一次建立链接是否有开始数据，没有则不建立请求体 */
-	int stop:1;         /* 删除连接用到的标记位 */
+	int active:1; 	         /* 链接是否已加入epoll队列中 */
+	int accept:1; 	         /* 是否用于监听套接字 */
+	int ready:1;  	         /* 第一次建立链接是否有开始数据，没有则不建立请求体 */
+	int stop:1;              /* 删除连接用到的标记位 */
 } connection_t;
 
 typedef struct server
 {
-	pid_t     pid;       /* 进程pid */
-	int       port;      /* 绑定端口 */
-	char*     conf_path; /* 配置文件 */
-	char*     log_path;  /* 日志文件 */
-	log_t     g_log;     /* 日志，智能指针 */
-	cycle_t*  cycle_p;   /* 事件循环结构体，智能指针 */
-	char*     bind_addr[16];/* 端口绑定的本地IP列表 */
-	int*      bind_count;   /* 实际绑定本地IP列表数( <= 16) */
+	pid_t     pid;           /* 进程pid */
+	int       port;          /* 绑定端口 */
+	int       open_fd_limit; /* 进程打开fd最大数，默认值 10000 */
+	char*     conf_path;     /* 配置文件 */
+	char*     log_path;      /* 日志文件 */
+	log_t*    log_p;         /* 日志，智能指针 */
+	cycle_t*  cycle_p;       /* 事件循环结构体，智能指针 */
+	char*     bind_addr[16]; /* 端口绑定的本地IP列表 */
+	int*      bind_count;    /* 实际绑定本地IP列表数( <= 16) */
 	int       daemonize:1;   /* 是否后台模式 */
-	int       type;      /* server类型，eg: master or slave */
+	int       type;          /* bitwise, server类型，eg: master or slave */
+	int       unix_fd;       /* UNIX 域套接字 */
+	char*     unix_path;     /* 路径 */
+	int       cpu_num;       /* cpu核数 */
 } server;
 
 server ser;
@@ -213,6 +218,7 @@ int empty_handler(connection_t* c)
 	return 0;
 }
 
+/* 添加epoll事件，mask为bitwise，可以兼容 READ_EVENT，WRITE_EVENT  */
 int epoll_add_event(connection_t* c, int ep_fd, int sock_fd, int mask)
 {
 	int ret     = 0;
@@ -816,7 +822,8 @@ static void init_signal()
 
 static void init_log()
 {
-	ser.g_log.set_log_path("ser.log");
+	ser.log_p = new log_t();
+	ser.log_p->set_log_path("ser.log");
 }
 
 static int init_ser()
