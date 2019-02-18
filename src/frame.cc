@@ -25,7 +25,7 @@
 #include "error.h"
 
 /* pb */
-#include "person.pb.h"
+#include "request.pb.h"
 
 using namespace std;
 
@@ -35,6 +35,7 @@ using namespace std;
 #define LISTEN_SIZE 	256         /* to configure */
 #define TIME_OUT 		3           /* to configure */
 #define STRING_EOF      '\0'
+#define CLRF            "\r\n"
 
 #define READ_EVENT 		(1 << 0)
 #define WRITE_EVENT 	(1 << 1)
@@ -72,18 +73,19 @@ typedef void (*timer_func)(void *);
 
 /*     todo 
  *  1. accept 解析对端 ip:port，协议类型
- *  2. 限制描述符分配
- *  3. connection_t 兼容 timer
- *  4. connection_t 兼容 stop
- *  5. cycle_t 兼容 stop
- *  6. 完善master流程，兼容子进程通信，子进程死后拉起
+ *  2. 安装信号机制
+ *  3. 限制描述符分配
+ *  4. connection_t 兼容 timer
+ *  5. connection_t 兼容 stop
+ *  6. cycle_t 兼容 stop
+ *  7. 完善master流程，兼容子进程通信，子进程死后拉起
  		1) 子进程死，master进程拉起
  		2) master进程死，所有子进程抢夺文件锁，抢夺的那个拉起master进程
  		3) master定时器每 10ms 监听所有子进程健康
  		4) 每个子进程定时器监听 master 进程健康
- *  7. 添加配置解析
- *  9. 添加 mysql 访问器，兼容协程
- * 10. 添加 redis 访问器，兼容协程
+ *  8. 添加 mysql 访问器，兼容协程
+ *  9. 添加 redis 访问器，兼容协程
+ * 10. 添加配置解析
  * 11. 扩展成 c++ */
 
 typedef struct task_s
@@ -93,7 +95,7 @@ typedef struct task_s
 	// int   type;
 } task_t;
 
-/* 读写时间结构体 */
+/* 读写事件结构体 */
 typedef struct event_s
 {
 	event_handler handler; /* 事件handler */
@@ -143,6 +145,7 @@ typedef struct connection_s
 
 	cycle_t* cycle_p;        /* 对应的事件循环结构体 */
 
+	int timer:1;             /* 是否已加入到定时器队列中 */
 	int active:1; 	         /* 链接是否已加入epoll队列中 */
 	int accept:1; 	         /* 是否用于监听套接字 */
 	int ready:1;  	         /* 第一次建立链接是否有开始数据，没有则不建立请求体 */
@@ -187,7 +190,7 @@ typedef struct server
 	int       cpu_num;       /* cpu核数 */
 } server;
 
-server ser;
+server  ser;
 cycle_s cycle;
 
 int set_fd_noblock(int fd)
@@ -409,27 +412,14 @@ int free_connection(connection_t* c)
 	return 0;
 }
 
-/* 读取到client关闭写端，而此时server端还有数据，则连接处于半关闭状态 */
-int half_close(int fd)
-{
-	int ret = 0;
-	ret = shutdown(fd, SHUT_WR);
-	if(-1 == ret)
-	{
-		info_log("shutdown failed, errno msg:%s", strerror(errno));
-		return -1;
-	}
-
-	return 0;
-}
-
 /* 解析buffer，直到解析完整请求 */
 int protocol_decoder(connection_t* c, int& err)
 {
 	buffer_t& in_buffer = c->in_buf;
-	char* eof = in_buffer.find_eof("\r\n");
+	char* eof = in_buffer.find_eof(CLRF);
 	if(!eof)
 	{
+		err = kDECODER_AGAIN;
 		return -1;
 	}
 
@@ -449,24 +439,18 @@ int parse_protocol_handler(connection_t* c)
 		{
 			return kDECODER_AGAIN;
 		}
-		
-		if(kDECODER_ERROR == err)
-		{
-			return kDECODER_ERROR;
-		}
 	}
 
 	/* 解析出完整的请求 */
 	char buf[ret+1];
 	buf[ret] = '\0';
 	in_buffer.get_string(ret, buf);
-	c->req.data = new person::Persion();
-	person::Persion* person_p = (person::Persion*)c->req.data;
-	person_p->ParseFromString(buf);
-	in_buffer.read_len(strlen("\r\n"));
+	c->req.data = new common::comm_request();
+	common::comm_request* req_p = (common::comm_request*)c->req.data;
+	req_p->ParseFromString(buf);
+	in_buffer.read_len(strlen(CLRF));
 
 	// info_log("person:%s\n", person.ShortDebugString().c_str());
-	
 
 	return 0;
 }
@@ -477,12 +461,15 @@ int client_handler(connection_t* c)
 	buffer_t& out_buf = c->out_buf;
 
 	// const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
-	person::Persion person;
-	person.CopyFrom(*(person::Persion*)c->req.data);
+	// out_buf.append_string(str);
+	
+	common::comm_request req;
+	req.CopyFrom(*(common::comm_request*)c->req.data);
+	
 	string str;
-	person.SerializeToString(&str);
+	req.SerializeToString(&str);
 	out_buf.append_string(str.c_str());
-	out_buf.append_string("\r\n");
+	out_buf.append_string(CLRF);
 	
 	return 0;
 }
@@ -501,7 +488,7 @@ int read_handler(connection_t* c)
 	ret = in_buffer.read_buf(fd, err);
 	if(ret < 0)
 	{
-		if(err == kBUFFER_EAGAIN)
+		if(err == kBUFFER_EAGAIN) /* 数据读取错误 */
 		{
 			return kBUFFER_EAGAIN;
 		}
@@ -513,20 +500,33 @@ int read_handler(connection_t* c)
 		return -1;
 	}
 
-	if(ret < 0 && err == kBUFFER_EOF)
+	if(err == kBUFFER_EOF) /* 客户端关闭 */
 	{
 		free_connection(c);
 		return 0;
 	}
 
 	ret = parse_protocol_handler(c);
-	if(0 != ret) return -1;
+	if(kDECODER_ERROR == ret)
+	{
+		free_connection(c);
+		return -1;
+	}
+	else if(kDECODER_AGAIN == ret)
+	{
+		return 0;
+	}
 
 	client_handler(c);
 
 	buffer_t& out_buf = c->out_buf;
 	// info_log("========>  str len:%lu, buf_len:%d, buf:%s\n", strlen(str), out_buf.readable_size(), out_buf.read_begin());
 	ret = out_buf.write_once(fd, err);
+	if(ret < 0 && err == kBUFFER_ERROR)
+	{
+		free_connection(c);
+		return -1;
+	}
 	// info_log("write has_write:%d unwrite:%d\n", ret, out_buf.readable_size());
 	if(out_buf.readable_size() > 0)
 	{
@@ -830,7 +830,6 @@ static int work_process_cycle()
 			{
 				if(!c->ready)
 				{
-
 					c->ready = 1;
 				}
 
@@ -903,7 +902,7 @@ static int master_process_cycle()
 /* 安装信号 handler */
 static void init_signal()
 {
-
+	
 }
 
 static void init_log()

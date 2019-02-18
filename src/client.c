@@ -13,11 +13,11 @@
 #include <stdlib.h>
 
 #include "buffer.h"
-#include "person.pb.h"
+#include "request.pb.h"
 
 #define PORT 			8888
 #define IP 				"172.18.185.251"
-#define CLRF			\r\n
+#define CLRF			"\r\n"
 
 typedef class buffer    buffer_t;
 
@@ -40,15 +40,19 @@ int main(int argc, char const *argv[])
 	// while(1)
 	{
 		int err;
-		buffer_t query_buf;
-		person::Persion person;
-		person.set_name("jiabo");
-		person.set_age(18);
-
 		string str;
-		person.SerializeToString(&str);
+
+		common::comm_request req;
+		req.mutable_head()->set_ver(1);
+		req.mutable_head()->set_cmd(1);
+		req.mutable_head()->set_sub_cmd(1);
+		req.mutable_head()->set_err_code(100);
+		req.mutable_head()->set_err_msg("wow");
+		req.SerializeToString(&str);
+
+		buffer_t query_buf;
 		query_buf.append_string(str.c_str());
-		query_buf.append_string("\r\n");
+		query_buf.append_string(CLRF);
 		// query_buf.append_string("GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n");
 		ret = query_buf.write_once(fd, err);
 
@@ -57,7 +61,7 @@ int main(int argc, char const *argv[])
 		buffer_t resp_buf;
 		if((ret = resp_buf.read_buf(fd, err)) > 0)
 		{
-			char* eof = resp_buf.find_eof("\r\n");
+			char* eof = resp_buf.find_eof(CLRF);
 			if(!eof)
 			{
 				return -1;
@@ -67,12 +71,20 @@ int main(int argc, char const *argv[])
 			char buf[len+1];
 			buf[len] = '\0';
 			resp_buf.get_string(len, buf);
-			person::Persion person;
-			person.ParseFromString(buf);
-			resp_buf.read_len(strlen("\r\n"));
+			common::comm_request tmp;
+			tmp.ParseFromString(buf);
+			resp_buf.read_len(strlen(CLRF));
 
-			printf("read -------------------\n");
-			printf("[%s]\n", person.ShortDebugString().c_str());
+			printf("---------- read ----------\n");
+			printf("[%s]\n", tmp.ShortDebugString().c_str());
+		}
+		else if(0 == ret)
+		{
+			printf("0 == ret\n");
+		}
+		else /* -1 == ret */
+		{
+			printf("0 == ret\n");
 		}
 	}
 
