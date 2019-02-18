@@ -1,0 +1,34 @@
+system v :
+
+header：
+#include <sys/types.h>
+#include <sys/shm.h>
+
+/* 1. [创建一块共享内存]，size指定内存大小
+ * 2. 而内核以系统分页大小整数倍分配共享内存，所以size会被提升到最近的系统分页大小整数倍
+ * 3. shmflg 为 IPC_CREAT 表示不存在与指定key对应的段，就创建
+ * 4. shmflg 如果同时指定 IPC_CREAT | IPC_EXCL，且对应的key对应段已存在，返回 EEXIST */
+int shmget(key_t key, size_t size, int shmflg); 
+
+/* 1. 将 shmid 标识的 [共享内存段附加到进程虚拟地址空间] 中
+ * 2. shmaddr 为 NULL 时，内核会选一个合适的地址让共享内存段附加上
+ * 3. shmaddr 不为 NULL， 且 shmflag 未设置 SHM_RND，共享内存段会附加到 shmaddr 指定的地址处，他必须是系统分页大小整数倍
+ * 4. shmaddr 不为 NULL， 且 shmflag 设置了 SHM_RND，共享内存段会附加到 最近的常量 SHMLBA(shared memory low boundary address) 的倍数。
+      该常量等于系统分页大小的某个倍数 */
+
+/* tips: 将 shmaddr 设为 NULL 的好处是：
+         1) 降低了应用程序移植性，因为 linux 上的有效地址在另一个系统上可能是无效的
+         2) 将一个共享内存附着到一个正在使用中的地址会失败 */
+int shmat(int shmid, const void* shmaddr, int shmflg);
+
+/* 1. 将共享内存端 [分离出虚拟地址空间] */
+int shmdt(const void* shmaddr);
+
+/* 1.  */
+int shmctl(int shmid, int cmd, struct shmid_ds* buf);
+
+------------------------------------------------------------------------------------------------------------------------------------
+
+posix :
+
+header：

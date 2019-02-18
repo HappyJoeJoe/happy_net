@@ -1,0 +1,42 @@
+
+1. 对于节点式容器(map, list, set)元素的删除，插入操作会导致指向该元素的迭代器失效，其他元素迭代器不受影响
+2. 对于顺序式容器(vector，string，deque)元素的删除、插入操作会导致指向该元素以及后面的元素的迭代器失效
+
+1.对于节点式容器
+std::list<struct> mList;
+...
+std::list<struct>::iterator iter = mList.begin();
+for ( ; iter != mList.end(); )
+{
+    if (...)
+    {
+        //因为节点式只会导致当前节点迭代器失效，所以删除节点的同时对迭代器进行后移的操作，因为其他元素不会失效
+        mList.erase(iter++);
+    }
+    else
+    {
+        ++iter;
+    }
+}
+
+2.对于顺序式容器
+std::vector<struct> mVector;
+...
+std::vector<struct>::iterator iter = mVector.begin();
+for ( ; iter != mVector.end(); )
+{
+    if (...)
+    {
+        //这里就比较有说法了，因为顺序式容器会使本身和后面的元素迭代器都失效，所以不能简单的++操作
+        //这里顺序式容器的erase()会返回紧随被删除元素的下一个元素的有效迭代器
+        //而节点式容器的erase()的返回值是void，这点我感觉太神奇了，确实太神奇了！！！！
+        iter = mVector.erase(iter);
+    }
+    else
+    {
+        ++iter;
+    }
+}
+
+注意：容器看具体STL库的实现了，VS中两类容器的earse都返回下一个迭代器指针。
+

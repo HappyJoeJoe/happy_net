@@ -1,0 +1,8 @@
+
+headers:
+#include <sys/socket.h>
+
+int shutdown(int sockfd, int how);
+
+how:
+SHUT_RD: 关闭 sockfd 读端，若关闭后继续读则读到文件尾(0)，

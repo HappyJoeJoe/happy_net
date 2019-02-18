@@ -1,3 +1,6 @@
+header:
+#include <unistd.h>
+
 int dup2(int oldfd, int newfd)
 
 1. 为 oldfd 创建新的文件描述符副本，并将其编号命名为 newfd

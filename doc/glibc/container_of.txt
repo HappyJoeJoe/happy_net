@@ -1,0 +1,23 @@
+返回 struct 体某个字段对应的结构体首地址
+
+#define container_of(PTR,TYPE,MEMBER)    ({  \
+    const typeof(((TYPE *)0)->MEMBER) *__mptr=(PTR);  \
+    (TYPE *) ((char *)__mptr - offsetof(TYPE,MEMBER)); })
+
+ps: __mptr 为临时的该结构体成员指针
+
+------------------------------------------------------------------------------------------------
+
+int main(int argc, char *argv[])
+{
+    struct test{
+        int num;
+        char ch; 
+    }t1={100,'c'};
+
+    char *pch=&t1.ch;
+    struct test *ptt=container_of(pch,struct test,ch);
+    printf("num=%d\n",ptt->num);
+
+    return 0;
+}

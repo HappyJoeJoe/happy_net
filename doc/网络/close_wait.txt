@@ -1,0 +1,3 @@
+http://blog.chinaunix.net/uid/29075379/cid-181331-list-1.html
+
+close_wait 是因为client关闭fd后，发送了FIN包，ser收到FIN后，发送了ACK包后，变为了 close_wait

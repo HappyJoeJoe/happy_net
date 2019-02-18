@@ -52,19 +52,23 @@ using namespace std;
 #define warn_log(fmt, ...)  ser.log_p->level_log(kLOG_WARN,  fmt, ##__VA_ARGS__)
 #define err_log(fmt, ...)   ser.log_p->level_log(kLOG_ERR,   fmt, ##__VA_ARGS__)
 
-typedef class log        	log_t;
-typedef class buffer        buffer_t;
-typedef struct task_s       task_t;
-typedef struct connection_s connection_t;
-typedef int (*event_handler)(connection_t *);
-typedef void (*timer_func)(void *);
 
-typedef list<task_t>		timer_task_queue_t;
-typedef list<task_t>		io_task_queue_t;
-typedef list<task_t>		accept_task_queue_t;
+typedef class log        	  log_t;
+typedef struct task_s         task_t;
+typedef struct event_s        event_t;
+typedef class buffer          buffer_t;
+typedef struct connection_s   connection_t;
+typedef struct cycle_s        cycle_t;
+
+typedef list<task_t>		  timer_task_queue_t;
+typedef list<task_t>		  io_task_queue_t;
+typedef list<task_t>		  accept_task_queue_t;
 typedef vector<struct  epoll_event>    epoll_event_vec_t;
 typedef map<uint64_t,  list<task_t>>   timer_queue_t;
 typedef map<long long, connection_t*>  client_dict_t; //智能指针
+
+typedef int (*event_handler)(connection_t *);
+typedef void (*timer_func)(void *);
 
 /*     todo 
  *  1. accept 解析对端 ip:port，协议类型
@@ -73,9 +77,13 @@ typedef map<long long, connection_t*>  client_dict_t; //智能指针
  *  4. connection_t 兼容 stop
  *  5. cycle_t 兼容 stop
  *  6. 完善master流程，兼容子进程通信，子进程死后拉起
+ 		1) 子进程死，master进程拉起
+ 		2) master进程死，所有子进程抢夺文件锁，抢夺的那个拉起master进程
+ 		3) master定时器每 10ms 监听所有子进程健康
+ 		4) 每个子进程定时器监听 master 进程健康
  *  7. 添加配置解析
- *  9. 添加 mysql 访问器
- * 10. 添加 redis 访问器
+ *  9. 添加 mysql 访问器，兼容协程
+ * 10. 添加 redis 访问器，兼容协程
  * 11. 扩展成 c++ */
 
 typedef struct task_s
@@ -99,25 +107,6 @@ typedef struct ip_addr
 	int     port;
 	int     proto_type; /* ipv4 还是 ipv6 */
 } ip_addr;
-
-/* 事件循环体 */
-typedef struct cycle_s
-{
-	int   efd;           /* epoll fd */
-	int   lfd;           /* listen fd，暂时放在 cycle_t 里，之后放在 server 里 */
-	unsigned long long      next_client_id;    /* 生成客户端 id */
-	client_dict_t           cli_dict;          /* client 字典，前期是map，后期演化成 vec */
-
-	timer_queue_t 			timer_queue;       /* 定时器存储队列 */
-	timer_task_queue_t      timer_task_queue;  /* 定时器任务队列 */
-
-	io_task_queue_t 		io_task_queue;     /* epoll 激活事件: IO 网络读写事件任务队列 */
-	accept_task_queue_t 	accept_task_queue; /* epoll 激活事件: accept 任务队列 */
-
-	epoll_event_vec_t       ee_vec;            /* 存储所有 epoll 注册事件 */
-
-	int stop:1;          /* 是否停止 */
-} cycle_t;
 
 /* 客户端请求完整请求体 */
 typedef struct request_s
@@ -157,8 +146,28 @@ typedef struct connection_s
 	int active:1; 	         /* 链接是否已加入epoll队列中 */
 	int accept:1; 	         /* 是否用于监听套接字 */
 	int ready:1;  	         /* 第一次建立链接是否有开始数据，没有则不建立请求体 */
+	int closing:1;           /*.半关半闭，客户端已经close了，而此时服务端有数据未发送完 */
 	int stop:1;              /* 删除连接用到的标记位 */
 } connection_t;
+
+/* 事件循环体 */
+typedef struct cycle_s
+{
+	int   efd;           /* epoll fd */
+	int   lfd;           /* listen fd，暂时放在 cycle_t 里，之后放在 server 里 */
+	unsigned long long      next_client_id;    /* 生成客户端 id */
+	client_dict_t           cli_dict;          /* client 字典，前期是map，后期演化成 vec */
+
+	timer_queue_t 			timer_queue;       /* 定时器存储队列 */
+	timer_task_queue_t      timer_task_queue;  /* 定时器任务队列 */
+
+	io_task_queue_t 		io_task_queue;     /* epoll 激活事件: IO 网络读写事件任务队列 */
+	accept_task_queue_t 	accept_task_queue; /* epoll 激活事件: accept 任务队列 */
+
+	epoll_event_vec_t       ee_vec;            /* 存储所有 epoll 注册事件 */
+
+	int stop:1;          /* 是否停止 */
+} cycle_t;
 
 typedef struct server
 {
@@ -385,6 +394,11 @@ int free_connection(connection_t* c)
 	int fd           = c->fd;
 	int id           = c->fd;
 
+	if(c->closing) /* 半关半闭直接return，等写完之后再释放 */
+	{
+		return 0;
+	}
+
 	cycle_p->cli_dict.erase(id);
 	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
 	close(fd);
@@ -465,8 +479,6 @@ int client_handler(connection_t* c)
 	// const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
 	person::Persion person;
 	person.CopyFrom(*(person::Persion*)c->req.data);
-	// person.set_name("hello world");
-	// person.set_age(1);
 	string str;
 	person.SerializeToString(&str);
 	out_buf.append_string(str.c_str());
@@ -550,6 +562,7 @@ int write_handler(connection_t* c)
 	// info_log("[%s->%s:%d] unwrite:%d\n", __FILE__, __func__, __LINE__, out_buf.readable_size());
 	if(out_buf.readable_size() == 0)
 	{
+		c->closing = 0;
 		c->wev.handler = write_empty_handler;
 		free_connection(c);
 	}
@@ -799,7 +812,17 @@ static int work_process_cycle()
 
 			if(events & EPOLLRDHUP)
 			{
+				if(c->in_buf.readable_size() > 0) /* 对端还在读取阶段，连请求都还没解析全，直接释放 */
+				{
+					break;
+				}
+				else if(c->out_buf.writable_size() > 0) /* 对端已经关闭，此时还有发送数据未发送完，处于半关半闭 */
+				{
+					c->closing = 1;
+				}
+
 				free_connection(c);
+				
 				continue;
 			}
 

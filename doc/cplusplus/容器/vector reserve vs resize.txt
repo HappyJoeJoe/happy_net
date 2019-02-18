@@ -1,4 +1,4 @@
-vector 
+std::vector 
 
 resize(size_type count): 
 1) 改变的是size
