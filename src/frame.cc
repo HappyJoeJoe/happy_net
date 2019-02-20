@@ -400,12 +400,7 @@ int free_connection(connection_t* c)
 	cycle_t* cycle_p = c->cycle_p;
 	int efd 	     = cycle_p->efd;
 	int fd           = c->fd;
-	int id           = c->fd;
-
-	if(c->closing) /* 半关半闭直接return，等写完之后再释放 */
-	{
-		return 0;
-	}
+	int id           = c->id;
 
 	cycle_p->cli_dict.erase(id);
 	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
@@ -450,10 +445,10 @@ int parse_protocol_handler(connection_t* c)
 	char buf[ret+1];
 	buf[ret] = '\0';
 	in_buffer.get_string(ret, buf);
+	in_buffer.read_len(strlen(CLRF));
 	c->req.data = new common::comm_request();
 	common::comm_request* req_p = (common::comm_request*)c->req.data;
 	req_p->ParseFromString(buf);
-	in_buffer.read_len(strlen(CLRF));
 
 	// info_log("person:%s\n", person.ShortDebugString().c_str());
 
@@ -472,6 +467,7 @@ int client_handler(connection_t* c)
 	/* 客户端 test */
 	common::comm_request req;
 	req.CopyFrom(*(common::comm_request*)c->req.data);
+	delete (common::comm_request*)c->req.data;
 	
 	common::comm_response resp;
 	resp.mutable_head()->set_err_code(1);
@@ -549,9 +545,9 @@ int read_handler(connection_t* c)
 	else
 	{
 		/* 如果（没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1）*/
-		free_connection(c);
-		//否则
 		c->stop = 1;
+		//否则
+		free_connection(c);
 	}
 
 	return ret;
@@ -575,7 +571,6 @@ int write_handler(connection_t* c)
 	// info_log("[%s->%s:%d] unwrite:%d\n", __FILE__, __func__, __LINE__, out_buf.readable_size());
 	if(out_buf.readable_size() == 0)
 	{
-		c->closing = 0;
 		c->wev.handler = write_empty_handler;
 		free_connection(c);
 	}
@@ -698,20 +693,6 @@ int delete_timer()
 void tmp_timer(void* arg)
 {
 	info_log("fuck!!!!!!!!!!!\n");
-}
-
-int half_close(connection_t* c)
-{
-	int ret = 0;
-	ret = shutdown(c->fd, SHUT_WR);
-	if(0 != ret)
-	{
-		c->closing = 1;
-		info_log("shutdown failed, error msg:%s", strerror(errno));
-		return -1;
-	}
-
-	return 0;
 }
 
 static int work_process_cycle()
@@ -839,15 +820,6 @@ static int work_process_cycle()
 
 			if(events & EPOLLRDHUP)
 			{
-				if(c->in_buf.readable_size() > 0) /* 对端还在读取阶段，连请求都还没解析全，直接释放 */
-				{
-					break;
-				}
-				else if(c->out_buf.writable_size() > 0) /* 对端已经关闭，此时还有发送数据未发送完，处于半关半闭 */
-				{
-					c->closing = 1;
-				}
-
 				free_connection(c);
 				
 				continue;

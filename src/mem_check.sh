@@ -1,5 +1,5 @@
-#!/bin/bash
+ #!/bin/bash
 
 killall ser
 
-valgrind --tool=memcheck ./ser
+valgrind --tool=memcheck --leak-check=full -v ./ser 
