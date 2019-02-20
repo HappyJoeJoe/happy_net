@@ -6,8 +6,10 @@ man page 里也建议没必要把两个标记位放到 struct epoll event 结构
 EPOLLIN: 读事件
 EPOLLOUT: 写事件
 EPOLLET: 边沿触发
-EPOLLRDHUP: ?
-
+EPOLLRDHUP: 用于检测对端关闭 socket
+EPOLLHUP: 当socket的一端认为对方发来了一个不存在的4元组请求的时候,会回复一个RST响应,在epoll上会响应为EPOLLHUP事件,目前我已知的两种情况会发响应RST
+	[1] 当客户端向一个没有在listen的服务器端口发送的connect的时候 服务器会返回一个RST 因为服务器根本不知道这个4元组的存在 
+	[2] 当已经建立好连接的一对客户端和服务器,客户端突然操作系统崩溃,或者拔掉电源导致操作系统重新启动(kill pid或者正常关机不行的,因为操作系统会发送FIN给对方).这时服务器在原有的4元组上发送数据,会收到客户端返回的RST,因为客户端根本不知道之前这个4元组的存在
 
 
 
@@ -15,5 +17,5 @@ connect sockfd:
 监听读写，因为 sockfd 连接服务端以后，服务端可能会马上回写一些数据，所以该 fd 处于可读可写
 
 listen sockfd:
-监听 listen fd 的水平触发 EPOLLIN | EPOLLRDHUP
+监听 listen fd 的水平触发 EPOLLIN
 

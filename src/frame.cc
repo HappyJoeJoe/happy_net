@@ -317,7 +317,7 @@ int epoll_add_listen(connection_t* c, int ep_fd, int listen_fd)
 {
 	int ret = 0;
 	struct epoll_event ee = {0};
-	ee.events = EPOLLIN | EPOLLRDHUP;
+	ee.events = EPOLLIN;
 	ee.data.ptr = c;
 
 	ret = epoll_ctl(ep_fd, EPOLL_CTL_ADD, listen_fd, &ee);
@@ -335,7 +335,7 @@ int epoll_del_listen(connection_t* c, int ep_fd, int listen_fd)
 {
 	int ret = 0;
 	struct epoll_event ee = {0};
-	ee.events = EPOLLIN | EPOLLRDHUP;
+	ee.events = EPOLLIN;
 	ee.data.ptr = c;
 
 	ret = epoll_ctl(ep_fd, EPOLL_CTL_DEL, listen_fd, &ee);
