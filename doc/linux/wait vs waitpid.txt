@@ -1,0 +1,89 @@
+header:
+#include <sys/wait.h>
+
+pid_t wait(int* status);
+
+1) 调用进程之前并无等待的子进程终止，将一直阻塞，直到某个子进程终止。
+   如果调用时以后子进程终止，wait 则立刻返回。
+
+2) 子进程终止的信息会通过 status 指针指向的整形返回。
+
+3) 终止子进程的 pid 通过 wait 返回值返回。
+
+4) wait 返回 -1，可能的错误原因是调用进程并无之前等待的子进程。此时 errno 置位 ECHILD。
+
+eg:
+
+for(int i = 0; i < argc; i++)
+{
+	pit_t pid = fork();
+	switch(pid)
+	{
+		case 0: /* 子进程 */
+			sleep(3);
+			break;
+		case -1:
+			printf("fork error\n");
+			break;
+		default:
+			break;
+	}
+
+	for (int i = 0; i < argc; ++i)
+	{
+		wait(NULL);
+	}
+
+	return 0;
+}
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+#include <sys/wait.h>
+
+pid_t waitpid(pid_t pid, int* status, int options);
+
+1) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

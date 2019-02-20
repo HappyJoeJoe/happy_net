@@ -162,7 +162,7 @@ public:
 	
 	int read_buf(int fd, int& err);
 
-	int write_once(int fd, int& err);
+	int write_buf(int fd, int& err);
 
 	int read_len(size_t len)
 	{
@@ -196,6 +196,8 @@ private:
 	}
 
 	int read_once(int fd, char* buf, int size);
+
+	int write_once(int fd, char* buf, int size);
 
 	void set_write_idx(size_t len)
 	{

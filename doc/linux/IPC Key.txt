@@ -1,0 +1,2 @@
+system v IPC Key 是一个整数，数据类型是 key_t. 
+IPC get 调用将 key 转化为一个整数 IPC 标识符.

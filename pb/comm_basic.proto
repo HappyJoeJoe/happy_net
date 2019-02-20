@@ -1,0 +1,26 @@
+syntax = "proto2";
+
+package common;
+
+message comm_req {
+    optional int32 ver        = 1; /* 协议版本号 */
+    optional int32 cmd        = 2; /* 命令字 */
+    optional int32 sub_cmd    = 3; /* 子命令字 */
+}
+
+message comm_resp {
+	optional int32  err_code  = 1; /* 错误码 */
+    optional string err_msg   = 2; /* 错误信息 */
+}
+
+message comm_request {
+	optional comm_req head    = 1;
+    /* 包体 */
+    optional string body      = 2;
+}
+
+message comm_response {
+	optional comm_resp head   = 1;
+    /* 包体 */
+    optional string body      = 2;
+}

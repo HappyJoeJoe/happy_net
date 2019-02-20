@@ -1,3 +1,19 @@
 EPOLLHUP EPOLLERR 两个标记位基本在epoll里没有被处理的情况，
 
 man page 里也建议没必要把两个标记位放到 struct epoll event 结构体的 events 上
+
+事件标记位: 
+EPOLLIN: 读事件
+EPOLLOUT: 写事件
+EPOLLET: 边沿触发
+EPOLLRDHUP: ?
+
+
+
+
+connect sockfd: 
+监听读写，因为 sockfd 连接服务端以后，服务端可能会马上回写一些数据，所以该 fd 处于可读可写
+
+listen sockfd:
+监听 listen fd 的水平触发 EPOLLIN | EPOLLRDHUP
+

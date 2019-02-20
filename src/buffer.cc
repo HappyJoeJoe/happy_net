@@ -91,41 +91,86 @@ int buffer::read_buf(int fd, int& err)
 	return count;
 }
 
-int buffer::write_once(int fd, int& err)
+int buffer::write_once(int fd, char* buf, int size)
 {
+	int err = 0;
 	int n_write = 0;
 
 	do
 	{
-		n_write = write(fd, read_begin(), readable_size());
+		n_write = write(fd, buf, size);
 		if(-1 == n_write)
 		{
 			err = errno;
 			if(EAGAIN == err)
 			{
-				// info_log("[%s->%s:%d]  EAGAIN  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
-				err = kBUFFER_EAGAIN;
-				return -1;
+				// printf("[%s->%s:%d]  EAGAIN  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
+				return kBUFFER_EAGAIN;
 			}
 			else if(EINTR == err)
 			{
-				// info_log("[%s->%s:%d]  EINTR  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
 			}
 			else
 			{
-				err = kBUFFER_ERROR;
-				// info_log("[%s->%s:%d]  kBUFFER_ERROR  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
-				return -1;
+				return kBUFFER_ERROR;
 			}
 		}
 		else if(n_write >= 0)
 		{
-			// info_log("[%s->%s:%d]  ======>  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
-			set_read_idx(n_write);
+			// printf("[%s->%s:%d]  ======>  n_write:%d\n", __FILE__, __func__, __LINE__, n_write);
 			break;
 		}
 		
 	}while(err == EINTR); //未读取数据之前遇到信号中断，则重读
 
 	return n_write;
+}
+
+int buffer::write_buf(int fd, int& err)
+{
+	int ret = 0;
+	int count = 0;
+
+	for (;;)
+	{
+		ret = write_once(fd, read_begin(), readable_size());
+		if(kBUFFER_ERROR == ret)
+		{
+			// printf("%s->%s:%d  fd:%d  read error\n", __FILE__, __func__, __LINE__, fd);
+			err = kBUFFER_ERROR;
+			return -1;
+		}
+		else if(kBUFFER_EAGAIN == ret)
+		{
+			err = kBUFFER_EAGAIN;
+
+			if(count > 0)
+			{
+				break;
+			}
+
+			// printf("%s->%s:%d  fd:%d  EAGAIN \n", __FILE__, __func__, __LINE__, fd);
+			return -1;
+		}
+		else if(ret == 0)
+		{
+			err = 0;
+
+			if(count > 0)
+			{
+				break;
+			}
+
+			// printf("%s->%s:%d  fd:%d  eof \n", __FILE__, __func__, __LINE__, fd);
+			return 0;
+		}
+		else
+		{
+			count += ret;
+			set_read_idx(ret);
+			// printf("方法:%s 行号:%d fd:%d *** has_read:%d ***\n", __func__, __LINE__, fd, ret);
+		}
+	}
+
+	return count;
 }

@@ -25,7 +25,7 @@
 #include "error.h"
 
 /* pb */
-#include "request.pb.h"
+#include "comm_basic.pb.h"
 
 using namespace std;
 
@@ -87,6 +87,11 @@ typedef void (*timer_func)(void *);
  *  9. 添加 redis 访问器，兼容协程
  * 10. 添加配置解析
  * 11. 扩展成 c++ */
+
+//--------------------------------------------------------------------------------
+
+/* bug:
+ *  1. 高并发请求服务的时候，有若干连接处于 CLOSE_WAIT 状态，说明服务没把套接字关闭掉 */
 
 typedef struct task_s
 {
@@ -460,14 +465,22 @@ int client_handler(connection_t* c)
 {
 	buffer_t& out_buf = c->out_buf;
 
+	/* ab test */
 	// const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
 	// out_buf.append_string(str);
 	
+	/* 客户端 test */
 	common::comm_request req;
 	req.CopyFrom(*(common::comm_request*)c->req.data);
 	
+	common::comm_response resp;
+	resp.mutable_head()->set_err_code(1);
+	resp.mutable_head()->set_err_msg("ok");
+	string tmp = req.body();
+	reverse(begin(tmp), end(tmp));
+	resp.set_body("=== " + tmp + " ===");
 	string str;
-	req.SerializeToString(&str);
+	resp.SerializeToString(&str);
 	out_buf.append_string(str.c_str());
 	out_buf.append_string(CLRF);
 	
@@ -521,7 +534,7 @@ int read_handler(connection_t* c)
 
 	buffer_t& out_buf = c->out_buf;
 	// info_log("========>  str len:%lu, buf_len:%d, buf:%s\n", strlen(str), out_buf.readable_size(), out_buf.read_begin());
-	ret = out_buf.write_once(fd, err);
+	ret = out_buf.write_buf(fd, err);
 	if(ret < 0 && err == kBUFFER_ERROR)
 	{
 		free_connection(c);
@@ -558,7 +571,7 @@ int write_handler(connection_t* c)
 	int fd = c->fd;
 	buffer_t& out_buf = c->out_buf;
 	
-	int ret = out_buf.write_once(fd, err);
+	int ret = out_buf.write_buf(fd, err);
 	// info_log("[%s->%s:%d] unwrite:%d\n", __FILE__, __func__, __LINE__, out_buf.readable_size());
 	if(out_buf.readable_size() == 0)
 	{
@@ -685,6 +698,20 @@ int delete_timer()
 void tmp_timer(void* arg)
 {
 	info_log("fuck!!!!!!!!!!!\n");
+}
+
+int half_close(connection_t* c)
+{
+	int ret = 0;
+	ret = shutdown(c->fd, SHUT_WR);
+	if(0 != ret)
+	{
+		c->closing = 1;
+		info_log("shutdown failed, error msg:%s", strerror(errno));
+		return -1;
+	}
+
+	return 0;
 }
 
 static int work_process_cycle()

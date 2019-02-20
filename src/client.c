@@ -13,7 +13,7 @@
 #include <stdlib.h>
 
 #include "buffer.h"
-#include "request.pb.h"
+#include "comm_basic.pb.h"
 
 #define PORT 			8888
 #define IP 				"172.18.185.251"
@@ -46,15 +46,14 @@ int main(int argc, char const *argv[])
 		req.mutable_head()->set_ver(1);
 		req.mutable_head()->set_cmd(1);
 		req.mutable_head()->set_sub_cmd(1);
-		req.mutable_head()->set_err_code(100);
-		req.mutable_head()->set_err_msg("wow");
+		req.set_body("hello world");
 		req.SerializeToString(&str);
 
 		buffer_t query_buf;
 		query_buf.append_string(str.c_str());
 		query_buf.append_string(CLRF);
 		// query_buf.append_string("GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n");
-		ret = query_buf.write_once(fd, err);
+		ret = query_buf.write_buf(fd, err);
 
 		// sleep(3);
 
@@ -71,12 +70,12 @@ int main(int argc, char const *argv[])
 			char buf[len+1];
 			buf[len] = '\0';
 			resp_buf.get_string(len, buf);
-			common::comm_request tmp;
-			tmp.ParseFromString(buf);
+			common::comm_response resp;
+			resp.ParseFromString(buf);
 			resp_buf.read_len(strlen(CLRF));
 
 			printf("---------- read ----------\n");
-			printf("[%s]\n", tmp.ShortDebugString().c_str());
+			printf("[%s]\n", resp.ShortDebugString().c_str());
 		}
 		else if(0 == ret)
 		{
