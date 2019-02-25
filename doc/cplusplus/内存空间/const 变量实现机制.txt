@@ -1,0 +1,44 @@
+const static 修饰变量的读写：
+
+#include <memory>
+#include <stdio.h>
+
+using namespace std;
+
+int main()
+{
+    const static int i = 3; //rodata
+    int* p = (int*)(&i);
+    *p = 7; //程序挂掉！！
+    printf("i:%d, *p:%d", i, *p);
+    return 0;
+}
+
+执行: g++ -g test.cc -o test
+     ./test
+     [1]    24664 segmentation fault  ./test
+
+
+变量 i 是只读变量，此时取得 i 的地址进行重写，会重写非法地址，引起段错误（segment fault）
+
+------------------------------------------------------------------------------------------------------------
+
+#include <memory>
+#include <stdio.h>
+
+using namespace std;
+
+int main()
+{
+    const int i = 3;
+    int* p = (int*)(&i);
+    *p = 7;
+    printf("i:%d, *p:%d\n", i, *p);
+    return 0;
+}
+
+执行: g++ -g test.cc -o test
+     ./test
+     i:3, *p:7
+
+const 修饰的局部变量已经被优化为类似于 define 语句，对变量的 i 的引用会被编译器优化为常量的引用，而 i 的真实值已经变为了 7

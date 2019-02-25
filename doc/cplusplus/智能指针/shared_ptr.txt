@@ -1,0 +1,118 @@
+header:
+#include <memory>
+
+用法: shared_ptr<T> ptr(new T);
+1) shared_ptr 的 size 始终是裸指针 size 的两倍。
+2) 一个指针指向实际对象 T
+3) 一个指针指向控制块 Control block
+4) 实际上，引用计数(Reference count)，自定义销毁，Weak count等均存储在 Control block 上
+5) 所以在 64 位机器上，sizeof(ptr) == 16，两倍裸指针大小
+6) 
+
+控制块 Control block 的分配主要有以下几种:
+1) 使用 make_shared 的时候，总是分配控制块
+2) shared_ptr 由 unique_ptr 或裸指针构建时分配控制块
+3) shared_ptr 由其他 shared_ptr 或 unique_ptr 构建时不分配新的控制块，而是沿用既有指针的控制块
+
+错误案例：
+auto pw = new Widget; //pw is raw ptr
+shared_ptr<Widget> spw1(pw, loggingDel); //create control block for pw
+shared_ptr<Widget> spw2(pw, loggingDel); //create 2nd control block
+
+我们用一个裸指针创建了多个 shared_ptr 时，会分配多个 Control block，这就会导致一个问题，同一个对象拥有多个 Control block，
+这就很容易导致一个对象被销毁多次
+
+有两个方法可以避免上述发生：
+1) 尽可能避免使用裸指针来构建 shared_ptr，使用 make_shared
+2) 必须使用裸指针的话，new 出对象直接传入，而不是将指针传入
+
+
+------------------------------------------------------------------------------------------------------------------------
+
+另外一种情况是涉及 this 指针的情况：
+class Widget {
+public:
+	...
+
+	void  process() {
+		...
+		processedWidgets.emplace_back(this);    //add it to the list of processed widgets
+	}
+
+private:
+	vector<shared_ptr<Widget>> processedWidgets;
+}
+
+上面这段代码可以正常编译，使用 this 指针构建了一个 shared_ptr 保存到了 vector 中，这就给当前对象生成了一个 Control block，但实际上由于外部对象使用 shared_ptr 管理这个对象，
+该对象已经存在了一个控制块了
+shared_ptr<Widget> spw1(new Widget) //产生一个控制块
+为解决这个问题，标准库引入了一个新的模板类 enable_shared_from_this，自定义类可以通过继承这个模板类来规避 this 指针构建 shared_ptr 的问题。上面代码修改如下：
+
+class Widget : public enable_shared_from_this<Widget> {
+
+public:
+	void process() {
+		// add std::shared_ptr to current object to processedWidgets
+		processedWidgets.emplace_back(shared_from_this());
+	}
+};
+
+通过调用 enable_shared_from_this 类的 shared_from_this 函数来获取对象本身的 shared_ptr 指针，就不会创建一个新的控制块了。
+shared_from_this 会自动查找关联当前对象的的控制块，并创建一个 shared_ptr 引用已有的 Control block，实际情况中，对象函数被调用必然是
+在对象已经存在的前提下，所以当前对象关联的 Control block 总是存在的，如果 shared_from_this 未查找到当前对象关联的控制块，就会导致未定义行为，
+就会抛出一个异常。
+
+为了避免上面的情况，可以把类的构造函数设为私有，再通过一个工厂方法返回 shared_ptr 来确保客户端调用的时候，对象一定关联了 Control block
+
+class Widget
+{
+public:
+	
+	// factory function that perfect-forwards args
+    // to a private ctor
+    template<typename... Ts>
+    static std::shared_ptr<Widget> create(Ts&&... params);
+   	...
+    void process(); // as before
+    ...
+private:
+    ... // ctors
+	
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,45 @@
+二、要删除容器中满足特定判别式（条件）的全部对象
+
+1、假设容器是vector、string或deque，则使用erase-remove_if习惯使用方法。
+
+比如我们不再从c中删除全部等于特定值的元素。而是删除使以下的判别式返回true的每个对象：
+
+bool badvalue(int);
+
+c.erase(remove_if(c.begin(),c.end(),badvalue),c.end());
+
+2、对于list，则使用list::remove_if。比如：
+
+c.remove_if(badvalue);
+
+3、假设容器是一个标准关联容器。则使用remove_copy_if和swap。或者写一个循环来遍历容器中的元素，记住当把迭代器传给erase时，要对它进行后缀递增。比如：
+
+AssocContainer<int>c;
+
+…
+
+AssocContainer<int>goodvalues;
+
+Remove_copy_if(c.begin(),c.end(),inserter(goodvalues,goodvalues.end()),badvalue);
+
+c.swap(goodvalues);
+
+或者
+
+AssocContainer<int>c;
+
+…
+
+for(AssocContainer<int>::iteratori = c.begin();i != c.end();)
+
+{
+
+   if(badvalue(*i))
+
+       c.erase(i++);
+
+   else
+
+       ++i;
+
+}

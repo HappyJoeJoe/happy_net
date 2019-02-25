@@ -1,0 +1,65 @@
+header:
+#include <pthread.h>
+
+int pthread_cond_wait(pthread_cond_t* cond, pthread_mutex_t* mutex);
+包含的语义: 以下三步是原子性的
+1) 对 mutex 解锁
+2) 阻塞当前调用线程，并等待相应的信号量 cond 被其他线程的 pthread_cond_signal or pthread_cond_broadcast 通知
+3) 从当前线程醒来
+
+
+如何访问共享变量:
+
+pthread_mutex_lock(&lock);
+
+while(/* 检查共享变量是否不在我们期望的状态 */)
+	pthread_cond_wait(&cond, &mutex);
+
+/* 此时共享变量在期望状态下，做一些我们想要的工作 */
+
+pthread_mutex_unlock(&lock);
+
+
+一个通用的设计原则: 必须由一个 while 循环而不是一个 if 来控制 pthread_cond_wait 的访问.
+这是因为当代码从 pthread_cond_wait 返回时，并不能判定判断条件的状态，所以应该立即重新检查判断条件，在判断条件不满足的情况下继续休眠等待.
+
+从 pthread_cond_wait 返回时，之所以不能对判断条件的状态做任何架设，理由如下：
+1) 也许有多个线程等待获取与条件变量相关的互斥量，其他线程可能会率先醒来先获取互斥量并改变判断条件的状态
+2) 尽量设计相对"宽松的"的判断条件. 用条件变量来预测判断条件的可能性而非确定性，发送信号表明"可能有些事情而不是一定有一些事情"，
+   接受信号自然就再三检查一下是否真的如发送信号所言
+3) 虚假唤醒，比如没有线程就这个条件变量发送信号，等待此条件变量的线程仍有可能醒来
+------------------------------------------------------------------------------------------------
+生产者消费者:
+
+static pthread_mutex_t mtx  = PTHREAD_MUTEX_INITIALIZER; /* 静态创建互斥量 */
+static pthread_cond_t  cond = PTHREAD_COND_INITIALIZER; /* 静态创建条件变量 */
+static int avail = 0;
+
+生产者线程:
+
+pthread_mutex_lock(&lock);
+
+avail++;
+
+pthread_mutex_unlock(&lock);
+
+pthread_cond_signal(&cond);
+
+/***********************************************************************************************/
+
+消费者线程:
+
+for(;;)
+{
+	pthread_mutex_lock(&lock);
+
+	while(avail == 0)
+		pthread_cond_wait(&cond, &lock);
+
+	while(avail > 0)
+		avail--;
+
+	pthread_mutex_unlock(&lock);
+}
+
+同时等待相同条件变量的所有线程在调用 pthread_cond_wait or pthread_cond_timewait 时必须制定同一互斥量

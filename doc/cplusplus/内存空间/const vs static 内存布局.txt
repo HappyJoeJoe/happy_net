@@ -1,0 +1,95 @@
+/* file: test.cc */
+
+
+int g_i = 22; //data
+static int g_s_i;//bss
+const int g_c_i = 222;//rodata
+static int g_s_i_init = 220; //data
+const static int g_c_s_i = 200; //rodata
+
+typedef struct obj{
+    int a;
+    char b;
+    short c;
+} obj;
+
+const obj g_c_o = {0}; //rodata
+static obj g_s_o; //bss
+static obj g_s_o_zero = {0}; //bss
+static obj g_s_o_init = {2,'a',1}; //data
+const static obj g_c_s_o = {0};//rodata
+obj g_o;//bss
+
+int main()
+{
+    const static obj c_s_o = {0};//rodata
+    const obj c_o = {0};//栈空间
+    static obj s_o; //bss
+
+    const int c_i = 1; //栈空间
+    static int s_i;//bss
+    static int s_i_init = 11; //data
+    const static int c_s_i = 110; //rodata
+    return 0;
+}
+
+----------------------------------------------------------------
+g++ -c test.cc -o test.o
+objdump -dx test.o
+
+部分输出:
+//------------------------------------------------
+SYMBOL TABLE:
+0000000000000000 l    df *ABS*  0000000000000000 test.cc
+0000000000000000 l    d  .text  0000000000000000 .text
+0000000000000000 l    d  .data  0000000000000000 .data
+0000000000000000 l    d  .bss 0000000000000000 .bss
+0000000000000008 l     O .bss 0000000000000004 _ZL5g_s_i
+0000000000000000 l    d  .rodata  0000000000000000 .rodata
+0000000000000000 l     O .rodata  0000000000000004 _ZL5g_c_i
+0000000000000004 l     O .data  0000000000000004 _ZL10g_s_i_init
+0000000000000004 l     O .rodata  0000000000000004 _ZL7g_c_s_i
+0000000000000008 l     O .rodata  0000000000000008 _ZL5g_c_o
+0000000000000010 l     O .bss 0000000000000008 _ZL5g_s_o
+0000000000000018 l     O .bss 0000000000000008 _ZL10g_s_o_zero
+0000000000000008 l     O .data  0000000000000008 _ZL10g_s_o_init
+0000000000000010 l     O .rodata  0000000000000008 _ZL7g_c_s_o
+0000000000000018 l     O .rodata  0000000000000004 _ZZ4mainE5c_s_i
+0000000000000010 l     O .data  0000000000000004 _ZZ4mainE8s_i_init
+0000000000000020 l     O .bss 0000000000000004 _ZZ4mainE3s_i
+0000000000000028 l     O .bss 0000000000000008 _ZZ4mainE3s_o
+0000000000000020 l     O .rodata  0000000000000008 _ZZ4mainE5c_s_o
+0000000000000000 l    d  .note.GNU-stack  0000000000000000 .note.GNU-stack
+0000000000000000 l    d  .eh_frame  0000000000000000 .eh_frame
+0000000000000000 l    d  .comment 0000000000000000 .comment
+0000000000000000 g     O .data  0000000000000004 g_i
+0000000000000000 g     O .bss 0000000000000008 g_o
+0000000000000000 g     F .text  000000000000001a main
+
+
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+   0: 55                    push   %rbp
+   1: 48 89 e5              mov    %rsp,%rbp
+   4: 48 c7 45 f0 00 00 00  movq   $0x0,-0x10(%rbp)
+   b: 00
+   c: c7 45 ec 01 00 00 00  movl   $0x1,-0x14(%rbp)
+  13: b8 00 00 00 00        mov    $0x0,%eax
+  18: 5d                    pop    %rbp
+  19: c3                    retq
+----------------------------------------------------------------
+
+//C++ const static 内存布局：
+const 修饰的全局变量或结构体都是 rodata
+const static 声明的变量或结构体都是 rodata
+
+未初始化的 static 都是 bss
+已初始化的 static 都是 data
+
+
+
+
+
+

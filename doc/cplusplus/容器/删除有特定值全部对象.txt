@@ -1,0 +1,76 @@
+一、要删除容器中有特定值的全部对象
+
+1、假设容器是vector、string或deque。则使用erase-remove习惯使用方法。比如：
+vector<int> c;
+
+c.erase(remove(c.begin(),c.end(),1963),c.end());//删除值是1963的元素
+
+以下讲一下算法remove：
+
+template<classForwardIterator,class T>
+
+ForwardIteratorremove(ForwardIterator first,ForwardIterator last,const T& value)
+
+{
+
+   first = find(first,last,value);
+
+   ForwardIterator next = first;
+
+return first ==last?first:remove_copy(++next,last,first,value);
+
+}
+
+template<classInputIterator,class OutputIterator,class T>
+
+OutputIteratorremove_copy(InputIterator first,InputIterator last,OutputIterator result,constT& value)
+
+{
+
+   for(;first != last;++first)
+
+   if (*first != value)
+
+   {
+
+       *result = *first;
+
+       ++result;
+
+}
+
+return result;
+
+}
+
+移除[first,last)之中全部与value相等的元素。
+
+这一算法并不真正从容器中删除那些元素（换句话说容器大小并为改变）。而是将每个不与value相等（也就是我们并不打算移除）的元素轮番赋值给first之后的空间。返回值标示出又一次整理后的最后元素的下一位置。
+
+比如序列{0,1,0,2,0,3,0,4}，假设我们运行remove()。希望移除全部0值元素，运行结果将是{1,2,3,4,0,3,0,4}。每个与0不相等的元素。1,2,3,4，分别被复制到第一、二、三、四个位置上。
+
+第四个位置以后不动，换句话说是第四个位置之后是这一算法留下的残余数据。
+
+返回值ForwardIterator指向第五个位置。假设要删除那些残余数据。可将返回的迭代器交给区间所在之容器的erase()成员函数。注意，array不适合使用remove()和remove_if()，由于array无法缩小尺寸，导致残余数据永远存在。对array而言，较受欢迎的算法是remove_copy()和remove_copy_if()。
+
+remove_copy移除[first,last)区间内全部与value相等的元素。它并不真正从容器中删除那些元素，而是将结果拷贝到一个以result标示起始位置的容器身上。
+
+新容器能够和原容器重叠。但假设对新容器实际给值时，超越了旧容器的大小，会产生无法预期的结果。
+
+返回值OutputIterator指出被复制的最后元素的下一位置。
+
+2、假设容器是list。则使用list::remove。
+
+比如：
+
+list<int> c;
+
+c.remove(1963);//该成员函数无返回值
+
+3、假设容器是一个标准关联容器。则使用它的erase成员函数。比如：
+
+map<int,int>c;
+
+c.erase(1963);//删除键值是1963的元素
+
+对于标准关联容器使用不论什么名为remove的操作都是全然错误的。这种容器没有名为remove的成员函数。使用remove算法可能会覆盖容器的值，同一时候可能会破坏容器。

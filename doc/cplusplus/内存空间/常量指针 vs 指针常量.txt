@@ -1,0 +1,5 @@
+int i = 4;
+const int* p = &i;  //常量指针，不可通过 p 间接修改 i 的值
+
+int* const pp = &i; //指针常量，不可以修改 pp 的值
+

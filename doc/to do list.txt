@@ -4,3 +4,4 @@
 4. 内存映射
 5. 何时使用 shutdown
 6. 文件描述符软硬限制
+7. c++ const static 分配内存吗
