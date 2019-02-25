@@ -887,8 +887,8 @@ static int master_process_cycle()
 {
 	pid_t id = gettid();
 	info_log("master process id:%d\n", id);
-	// close(lfd);
-	// info_log("master close lfd\n");
+	close(cycle.lfd);
+	info_log("master close lfd\n");
 	/* todo master搞事情 */
 	while(1)
 	{
@@ -974,30 +974,31 @@ int main(int argc, char* argv[])
 	info_log("cpu_num=%d\n", cpu_num);
 
 	/* 为方便调试work进程，暂时先把work进程逻辑放在main流程上 */
-	// for (int i = 0; i < cpu_num; ++i)
-	// {
-	// 	pid_t pid = fork();
-	// 	switch(pid)
-	// 	{
-	// 		case -1:
-	// 			info_log("fork error!\n");
-	// 			break;
-	// 		case 0:
-	// 			/* 子进程 */
-	// 			work_process_cycle();
-	// 			return 0;
-	// 		default:
-	// 			break;
-	// 	}
-	// }
+
+	for (int i = 0; i < 4; ++i)
+	{
+		pid_t pid = fork();
+		switch(pid)
+		{
+			case -1:
+				info_log("fork error!\n");
+				break;
+			case 0:
+				/* 子进程 */
+				work_process_cycle();
+				return 0;
+			default:
+				break;
+		}
+	}
 
 	/* 主进程 */
-	// master_process_cycle();
+	master_process_cycle();
 
 	/* 后台进程 */
 	// daemonize();
 	
-	work_process_cycle();
+	// work_process_cycle();
 	
 	return 0;
 }
