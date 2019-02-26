@@ -228,7 +228,8 @@ int set_fd_cloexec(int fd)
 }
 
 /* 1. so_reuseaddr 允许处于[time_wait]的socket重复可用
- * 2. 允许同一端口绑定多个实例，只要每个实例绑定本地ip地址不同即可 */
+ * 2. 允许同一端口绑定多个实例，只要每个实例绑定本地ip地址不同即可
+ * 3. 允许统一进程绑定同一个端口多个套接口，只要每个套接口指定不同IP即可 */
 int set_fd_reuseaddr(int fd)
 {
 	int yes = 1;
@@ -236,6 +237,20 @@ int set_fd_reuseaddr(int fd)
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const void *)&yes, sizeof(yes)) == -1)
     {
     	info_log("set reuseaddr failed, errno msg:[%s]\n", strerror(errno));
+        return -1;
+    }
+
+	return 0;
+}
+
+/* 1. 允许重复绑定，但 bind 相同 ip，port 的套接口都指定该选项才行 */
+int set_fd_reuseport(int fd)
+{
+	int yes = 1;
+
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, (const void *)&yes, sizeof(yes)) == -1)
+    {
+    	info_log("set reuseport failed, errno msg:[%s]\n", strerror(errno));
         return -1;
     }
 
@@ -407,7 +422,9 @@ int free_connection(connection_t* c)
 	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
 	close(fd);
 
-	//如果没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1
+	/* 1. 如果没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1 
+	 * 2. 读写时间的定时器
+	 * 3.  */
 	delete c;
 
 	return 0;
@@ -462,24 +479,24 @@ int client_handler(connection_t* c)
 	buffer_t& out_buf = c->out_buf;
 
 	/* ab test */
-	// const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
-	// out_buf.append_string(str);
+	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
+	out_buf.append_string(str);
 	
 	/* 客户端 test */
-	common::comm_request req;
-	req.CopyFrom(*(common::comm_request*)c->req.data);
-	delete (common::comm_request*)c->req.data;
+	// common::comm_request req;
+	// req.CopyFrom(*(common::comm_request*)c->req.data);
+	// delete (common::comm_request*)c->req.data;
 	
-	common::comm_response resp;
-	resp.mutable_head()->set_err_code(1);
-	resp.mutable_head()->set_err_msg("ok");
-	string tmp = req.body();
-	reverse(begin(tmp), end(tmp));
-	resp.set_body("=== " + tmp + " ===");
-	string str;
-	resp.SerializeToString(&str);
-	out_buf.append_string(str.c_str());
-	out_buf.append_string(CLRF);
+	// common::comm_response resp;
+	// resp.mutable_head()->set_err_code(1);
+	// resp.mutable_head()->set_err_msg("ok");
+	// string tmp = req.body();
+	// reverse(begin(tmp), end(tmp));
+	// resp.set_body("=== " + tmp + " ===");
+	// string str;
+	// resp.SerializeToString(&str);
+	// out_buf.append_string(str.c_str());
+	// out_buf.append_string(CLRF);
 	
 	return 0;
 }
@@ -739,7 +756,7 @@ static int work_process_cycle()
 	uint64_t now = get_curr_msec();
 
 	/* 定时器逻辑，已隐去，若开启去掉注释即可 */
-	// add_every_timer(timer_queue, 3, 2, tmp_timer, NULL);
+	add_every_timer(timer_queue, 3, 1, tmp_timer, NULL);
 
 	while(1)
 	{
@@ -757,7 +774,9 @@ static int work_process_cycle()
 
 		accept_task_queue.clear();
 
-		timer_queue_t::iterator timer_end = timer_queue.lower_bound(now);
+		/* lower_bound: 大于等于给定 key 的最小指针 
+		 * upper_bound: 大于给定 key 的最小指针 */
+		timer_queue_t::iterator timer_end = timer_queue.upper_bound(now);
 		// info_log("now:[%lu], next timer:[%lu]\n", now, timer_end->first);
 		if(now >= timer_end->first)
 		{
@@ -935,6 +954,7 @@ static int init_ser()
 	if(0 != ret)
 	{
 		info_log("set lfd[%d] failed\n", cycle.lfd);
+		exit(ret);
 	}
 
 	struct sockaddr_in addr;
@@ -975,30 +995,30 @@ int main(int argc, char* argv[])
 
 	/* 为方便调试work进程，暂时先把work进程逻辑放在main流程上 */
 
-	for (int i = 0; i < 4; ++i)
-	{
-		pid_t pid = fork();
-		switch(pid)
-		{
-			case -1:
-				info_log("fork error!\n");
-				break;
-			case 0:
-				/* 子进程 */
-				work_process_cycle();
-				return 0;
-			default:
-				break;
-		}
-	}
+	// for (int i = 0; i < cpu_num; ++i)
+	// {
+	// 	pid_t pid = fork();
+	// 	switch(pid)
+	// 	{
+	// 		case -1:
+	// 			info_log("fork error!\n");
+	// 			break;
+	// 		case 0:
+	// 			/* 子进程 */
+	// 			work_process_cycle();
+	// 			return 0;
+	// 		default:
+	// 			break;
+	// 	}
+	// }
 
 	/* 主进程 */
-	master_process_cycle();
+	// master_process_cycle();
 
 	/* 后台进程 */
 	// daemonize();
 	
-	// work_process_cycle();
+	work_process_cycle();
 	
 	return 0;
 }
