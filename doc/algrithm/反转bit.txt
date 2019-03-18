@@ -1,0 +1,19 @@
+typedef unsigned char MYWORD;
+#define BITS_OF_LEN 8
+
+MYWORD reverseBIT(MYWORD num)
+{
+	MYWORD ret = 0;
+	for (int i = 0; i < BITS_OF_LEN; ++i)
+	{
+		ret <<= 1;    //左移 1 bit 
+		ret |= num&1; //记录num的每 1 bit 
+		num >>= 1;    //右移 1 bit
+	}
+
+	return ret;
+}
+
+eg:
+num: 10110010
+ret: 01001101

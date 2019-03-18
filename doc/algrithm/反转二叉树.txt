@@ -1,0 +1,12 @@
+/* 反转二叉树 */
+void invertBinaryTree(Node* head)
+{
+	if(head == NULL) return;
+	
+	Node* tmp = head.left;
+	head.left = head.right;
+	head.right = tmp;
+
+	invertBinaryTree(head.left);
+	invertBinaryTree(head.right);
+}

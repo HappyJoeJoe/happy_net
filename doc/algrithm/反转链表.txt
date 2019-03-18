@@ -1,0 +1,19 @@
+/* (1)->(2)->(3)->NULL */
+
+/* 反转链表 */
+Node* reverseList(Node* head)
+{
+	if(head == NULL || head.next == NULL) return NULL;
+
+	Node* cur = head;
+	Node* other = NULL;
+	while(cur)
+	{
+		head = cur.next;   /* 原链表指向下一个节点 */
+		cur.next = other;  /* 原链表当前节点转移指向反转链表头节点 */
+		other = cur;       /* 反转链表头指向新节节点 */
+		cur = head;        /* 当前节点指针继续指向原链表头部 */
+	}
+
+	return other;
+}
