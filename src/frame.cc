@@ -43,6 +43,9 @@ using namespace std;
 #define MASTER          (1 << 0) /* master 实例 */
 #define SLAVE           (1 << 1) /* slave  实例 */
 
+#define IPV4_MASK       (1 << 0)
+#define IPV6_MASK       (1 << 1)
+
 // #define gettid() syscall(SYS_gettid)  
 
 #define RETURN_CHECK(RET) \
@@ -119,7 +122,7 @@ typedef struct ip_addr
 {
 	string  ip;
 	int     port;
-	int     family; /* ipv4 还是 ipv6 */
+	int     family:2; /* ipv4 还是 ipv6 */
 } ip_addr;
 
 /* 客户端请求完整请求体 */
@@ -215,6 +218,7 @@ int set_fd_noblock(int fd)
 	if(0 != ret)
 	{
 		info_log("set fd noblock failed, errno msg:[%s]\n", strerror(errno));
+		return -1;
 	}
 
 	return 0;
@@ -229,6 +233,7 @@ int set_fd_cloexec(int fd)
 	if(0 != ret)
 	{
 		info_log("set fd cloexec failed, errno msg:[%s]\n", strerror(errno));
+		return -1;
 	}
 
 	return 0;
