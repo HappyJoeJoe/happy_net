@@ -10,6 +10,7 @@
 #include <endian.h>
 #include <fcntl.h>
 #include <sys/time.h>
+#include <signal.h>
 
 /* c header */
 #include <vector>
@@ -30,7 +31,7 @@
 using namespace std;
 
 #define OPEN_FD_LIMIT   10000       /* to configure */
-#define PORT 			8888        /* to configure */
+#define PORT 			7777        /* to configure */
 #define EPOLL_SIZE 		1024        /* to configure */
 #define LISTEN_SIZE 	256         /* to configure */
 #define TIME_OUT 		3           /* to configure */
@@ -305,8 +306,7 @@ int epoll_add_event(connection_t* c, int ep_fd, int sock_fd, int mask)
 	ret = epoll_ctl(ep_fd, op, sock_fd, &ee);
 	if(0 != ret) 
 	{
-		info_log("method:[%s] line:[%d] | errno msg:%s \n", 
-			__func__, __LINE__, strerror(errno));
+		info_log("method:[%s] line:[%d] | sock_fd:%d errno msg:%s \n", __func__, __LINE__, sock_fd, strerror(errno));
 		return -1;
 	}
 
@@ -328,8 +328,7 @@ int epoll_delete_event(connection_t* c, int ep_fd, int sock_fd, int del_mask)
 	ret = epoll_ctl(ep_fd, op, sock_fd, &ee);
 	if(0 != ret)
 	{
-		info_log("method:[%s] line:[%d] | errno msg:%s \n", 
-			__func__, __LINE__, strerror(errno));
+		info_log("method:[%s] line:[%d] | errno msg:%s \n", __func__, __LINE__, strerror(errno));
 		return -1;
 	}
 
@@ -351,10 +350,11 @@ int epoll_add_listen(connection_t* c, int ep_fd, int listen_fd)
 	ret = epoll_ctl(ep_fd, EPOLL_CTL_ADD, listen_fd, &ee);
 	if(0 != ret)
 	{
-		info_log("method:[%s] line:[%d] | errno msg:%s \n", 
-			__func__, __LINE__, strerror(errno));
+		info_log("method:[%s] line:[%d] | errno msg:%s \n", __func__, __LINE__, strerror(errno));
 		return -1;
 	}
+
+	info_log("listen_fd:%d \n", listen_fd);
 
 	return 0;
 }
@@ -395,6 +395,8 @@ int free_connection(connection_t* c)
 	cycle.cli_dic.erase(c->id);
 	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
 	close(fd);
+
+	info_log("loc:[%s] line:[%d]  close fd:%d\n", __func__, __LINE__, fd);
 
 	/* 1. 如果没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1 
 	 * 2. 读写时间的定时器
@@ -462,7 +464,7 @@ int accept_handler(connection_t* lc)
 	int fd = 0;
 	while((fd = accept4(cycle_p->lfd, (sockaddr *)&ca, &len, SOCK_NONBLOCK)) > 0)
 	{
-		// info_log("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
+		info_log("loc:[%s] line:[%d]  accept fd:%d\n", __func__, __LINE__, fd);
 		connection_t* p_conn = new connection_t;
 		if(NULL == p_conn)
 		{
@@ -495,7 +497,13 @@ int accept_handler(connection_t* lc)
 			return -1;
 		}
 
-		epoll_add_event(p_conn, efd, p_conn->fd, READ_EVENT);
+		if(-1 == epoll_add_event(p_conn, efd, p_conn->fd, READ_EVENT))
+		{
+			info_log("loc:[%s] line:[%d]  close fd:%d\n", __func__, __LINE__, p_conn->fd);
+			close(p_conn->fd);
+			free(p_conn);
+			continue;
+		}
 
 		/* 加入到 cli_dic 里 */
 		cycle.cli_dic[p_conn->id] = p_conn;
@@ -992,16 +1000,27 @@ static int master_process_cycle()
 	return 0;
 }
 
-/* 安装信号 handler */
-static void init_signal()
-{
-	
-}
-
 static void init_log()
 {
 	ser.log_p = new log_t();
 	ser.log_p->set_log_path("ser.log");
+}
+
+/* 安装信号 handler */
+static int init_signal()
+{
+	sigset_t set;
+	sigaddset(&set, SIGCHLD);
+	sigaddset(&set, SIGALRM);
+	sigaddset(&set, SIGIO);
+
+	if(-1 == sigprocmask(SIG_BLOCK, &set, NULL))
+	{
+		err_log("signal init failed");
+		return -1;
+	}
+
+	return 0;
 }
 
 static int init_ser()
@@ -1010,7 +1029,7 @@ static int init_ser()
 	pid_t id = gettid();
 
 	init_log();
-	init_signal();
+	// init_signal();
 	
 	// client_free_list_t& cli_free = cycle.cli_free;
 	// cli_free.resize(1024);
