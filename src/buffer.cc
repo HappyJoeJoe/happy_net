@@ -1,4 +1,5 @@
 #include "buffer.h"
+#include "global.h"
 
 int buffer::read_once(int fd, char* buf, int size)
 {
@@ -26,7 +27,7 @@ int buffer::read_once(int fd, char* buf, int size)
 		}
 		else if(n_read >= 0)
 		{
-			// info_log("%s|%s|%d  n_read >= 0  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
+			// printf("%s|%s|%d  n_read >= 0  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
 			break;
 		}
 		
@@ -45,7 +46,7 @@ int buffer::read_buf(int fd, int& err)
 		ret = read_once(fd, write_begin(), writable_size());
 		if(kBUFFER_ERROR == ret)
 		{
-			// info_log("%s->%s:%d  fd:%d  read error\n", __FILE__, __func__, __LINE__, fd);
+			// printf("%s->%s:%d  fd:%d  read error\n", __FILE__, __func__, __LINE__, fd);
 			err = kBUFFER_ERROR;
 			return -1;
 		}
@@ -58,7 +59,7 @@ int buffer::read_buf(int fd, int& err)
 				break;
 			}
 
-			// info_log("%s->%s:%d  fd:%d  EAGAIN \n", __FILE__, __func__, __LINE__, fd);
+			// printf("%s->%s:%d  fd:%d  EAGAIN \n", __FILE__, __func__, __LINE__, fd);
 			return -1;
 		}
 		else if(ret == 0)
@@ -76,7 +77,7 @@ int buffer::read_buf(int fd, int& err)
 		else
 		{
 			count += ret;
-			set_write_idx(ret);
+			add_write_idx(ret);
 
 			if(writable_size() == 0)
 			{
@@ -167,7 +168,7 @@ int buffer::write_buf(int fd, int& err)
 		else
 		{
 			count += ret;
-			set_read_idx(ret);
+			add_read_idx(ret);
 			// printf("方法:%s 行号:%d fd:%d *** has_read:%d ***\n", __func__, __LINE__, fd, ret);
 		}
 	}

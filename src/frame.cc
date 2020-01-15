@@ -21,8 +21,9 @@
 /* user defined header */
 #include "co_thread.h"
 #include "buffer.h"
-#include "log.h"
+// #include "log.h"
 #include "error.h"
+#include "global.h"
 
 /* pb */
 #include "comm_basic.pb.h"
@@ -51,10 +52,26 @@ using namespace std;
 #define RETURN_CHECK(RET) \
 	if(0 != RET) return RET;
 
-#define debug_log(fmt, ...) ser.log_p->level_log(kLOG_DEBUG, fmt, ##__VA_ARGS__)
-#define info_log(fmt, ...)  ser.log_p->level_log(kLOG_INFO,  fmt, ##__VA_ARGS__)
-#define warn_log(fmt, ...)  ser.log_p->level_log(kLOG_WARN,  fmt, ##__VA_ARGS__)
-#define err_log(fmt, ...)   ser.log_p->level_log(kLOG_ERR,   fmt, ##__VA_ARGS__)
+
+
+// class log* get_log_instance();
+// #define debug_log(fmt, ...) get_log_instance()->level_log(kLOG_DEBUG, fmt, ##__VA_ARGS__)
+// #define info_log(fmt, ...)  get_log_instance()->level_log(kLOG_INFO,  fmt, ##__VA_ARGS__)
+// #define warn_log(fmt, ...)  get_log_instance()->level_log(kLOG_WARN,  fmt, ##__VA_ARGS__)
+// #define err_log(fmt, ...)   get_log_instance()->level_log(kLOG_ERR,   fmt, ##__VA_ARGS__)
+
+
+// class log* get_log_instance()
+// {
+// 	static class log* l = nullptr;
+// 	if (l == nullptr)
+// 	{
+// 		l = new log();
+// 		l->set_log_path(default_log_path);
+// 	}
+	
+// 	return l;
+// }
 
 
 typedef class log        	  log_t;
@@ -70,7 +87,7 @@ typedef list<task_t>		  accept_task_queue_t;
 typedef list<connection_t*>   client_free_list_t; //智能指针
 typedef vector<struct  epoll_event>    epoll_event_vec_t;
 typedef map<uint64_t,  set<task_t*>>   timer_queue_t;
-typedef map<uint64_t,  connection_t*>  client_dict_t;    //智能指针
+typedef set<connection_t*>    client_set_t;    //智能指针
 
 
 typedef int (*event_handler)(connection_t *);
@@ -142,7 +159,6 @@ typedef struct response_s
 /* 客户端链接 */
 typedef struct connection_s
 {
-	long long id;            /* 客户端id */
 	int fd;			         /* 套接字 */
 	int mask;                /* 事件类型掩码 */
 	
@@ -173,8 +189,7 @@ typedef struct cycle_s
 {
 	int   efd;           /* epoll fd */
 	int   lfd;           /* listen fd，暂时放在 cycle_t 里，之后放在 server 里 */
-	unsigned long long      next_client_id;    /* 生成客户端 id */
-	client_dict_t           cli_dic;           /* 用户字典 */
+	client_set_t            cli_set;           /* 用户字典 */
 	client_free_list_t      cli_free;          /* 空闲连接 */
 
 	timer_queue_t 			timer_queue;       /* 定时器存储队列 */
@@ -195,7 +210,7 @@ typedef struct server
 	int       open_fd_limit; /* 进程打开fd最大数，默认值 10000 */
 	char*     conf_path;     /* 配置文件 */
 	char*     log_path;      /* 日志文件 */
-	log_t*    log_p;         /* 日志，智能指针 */
+	// log_t*    log_p;         /* 日志，智能指针 */
 	cycle_t*  cycle_p;       /* 事件循环结构体，智能指针 */
 	char*     bind_addr[16]; /* 端口绑定的本地IP列表 */
 	int*      bind_count;    /* 实际绑定本地IP列表数( <= 16) */
@@ -297,15 +312,17 @@ int epoll_add_event(connection_t* c, int ep_fd, int sock_fd, int mask)
 	int op      = c->active ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 	struct epoll_event ee = {0};
 
-	mask |= c->mask;
+	// mask |= c->mask;
 	if(mask & READ_EVENT)  ee.events |= EPOLLIN | EPOLLET | EPOLLRDHUP;
 	if(mask & WRITE_EVENT) ee.events |= EPOLLOUT;
 	ee.data.ptr = (void *) c;
 
+	// info_log("[%s] ep_fd:%d sock_fd:%d c->active:%d\n", __func__, ep_fd, sock_fd, c->active);
+
 	ret = epoll_ctl(ep_fd, op, sock_fd, &ee);
 	if(0 != ret) 
 	{
-		info_log("method:[%s] line:[%d] | errno msg:%s \n", 
+		info_log("[%s:%d] | errno msg:%s \n", 
 			__func__, __LINE__, strerror(errno));
 		return -1;
 	}
@@ -321,7 +338,7 @@ int epoll_delete_event(connection_t* c, int ep_fd, int sock_fd, int del_mask)
 	int op  = EPOLL_CTL_DEL;
 	struct epoll_event ee = {0};
 
-	del_mask |= c->mask;
+	// del_mask |= c->mask;
 	if(del_mask & READ_EVENT)  ee.events |= EPOLLIN | EPOLLET | EPOLLRDHUP;
 	if(del_mask & WRITE_EVENT) ee.events |= EPOLLOUT;
 
@@ -387,14 +404,15 @@ connection_t* get_connection()
 /* 一个稍微复杂的过程 */
 int free_connection(connection_t* c)
 {
+	info_log("free_connection fd:%d\n", c->fd);
 	cycle_t* cycle_p = c->cycle_p;
 	int efd 	     = cycle_p->efd;
 	int fd           = c->fd;
-	int id           = c->id;
 
-	cycle.cli_dic.erase(c->id);
+	cycle.cli_set.erase(c);
 	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
 	close(fd);
+	c->fd = -1;
 
 	/* 1. 如果没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1 
 	 * 2. 读写时间的定时器
@@ -409,13 +427,12 @@ int free_connection1(connection_t* c)
 {
 	cycle_t* cycle_p = c->cycle_p;
 	int efd 	     = cycle_p->efd;
-	int id           = c->id;
 	int fd           = c->fd;
 
 	if(-1 == fd) return 0;
 
 	/* 从字典里删除 */
-	cycle.cli_dic.erase(c->id);
+	cycle.cli_set.erase(c);
 
 	/* 空闲连接回收结点 */
 	// cycle.cli_free.push_back(c);
@@ -469,24 +486,29 @@ int accept_handler(connection_t* lc)
 			close(fd);
 			continue;
 		}
-		p_conn->id           = cycle_p->next_client_id++;
-		p_conn->fd 			 = fd;
+		p_conn->fd		= fd;
+		p_conn->timer   = 0;
+		p_conn->active	= 0;
+		p_conn->accept	= 0;
+		p_conn->ready   = 0;
+		p_conn->stop 	= 0;
 
-		event_t* rev         = &(p_conn->rev);
-		rev->handler         = read_handler;
-		rev->arg 	         = p_conn;
-		rev->mask            = READ_EVENT;
-		rev->timer_set       = 0;
-		rev->timeout         = 0;
+		//读事件
+		event_t* rev    = &(p_conn->rev);
+		rev->handler    = read_handler;
+		rev->arg 	    = p_conn;
+		rev->mask       = READ_EVENT;
+		rev->timer_set  = 0;
+		rev->timeout    = 0;
+		//写事件
+		event_t* wev    = &(p_conn->wev);
+		wev->handler    = empty_handler;
+		wev->arg 	    = p_conn;
+		wev->mask       = WRITE_EVENT;
+		wev->timer_set  = 0;
+		wev->timeout    = 0;
 
-		event_t* wev         = &(p_conn->wev);
-		wev->handler         = empty_handler;
-		wev->arg 	         = p_conn;
-		wev->mask            = WRITE_EVENT;
-		wev->timer_set       = 0;
-		wev->timeout         = 0;
-
-		p_conn->cycle_p      = cycle_p;
+		p_conn->cycle_p = cycle_p;
 
 		ret = set_fd_reuseaddr(fd);
 		if(0 != ret)
@@ -497,8 +519,16 @@ int accept_handler(connection_t* lc)
 
 		epoll_add_event(p_conn, efd, p_conn->fd, READ_EVENT);
 
-		/* 加入到 cli_dic 里 */
-		cycle.cli_dic[p_conn->id] = p_conn;
+		/* 加入到 cli_set 里 */
+		if(cycle.cli_set.find(p_conn) == cycle.cli_set.end())
+		{
+			cycle.cli_set.insert(p_conn);
+		} 
+		else 
+		{
+			err_log("create connection error");
+			exit(-1);
+		}
 	}
 
 	return 0;
@@ -553,7 +583,7 @@ int client_handler(connection_t* c)
 	buffer_t& out_buf = c->out_buf;
 
 	/* ab test */
-	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 12\r\nConnection: keep-alive\r\n\r\nhello jiabo!";
+	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\nhello jiabo 123456789\r\n";
 	out_buf.append_string(str);
 	
 	/* 客户端 test */
@@ -588,12 +618,14 @@ int read_handler(connection_t* c)
 
 	if(rev->timeout) 
 	{
+		info_log(" 1111111111111 \n");
 		free_connection(c);
 		return 0;
 	}
 
 	if(c->stop)
 	{
+		info_log(" 2222222222222 \n");
 		free_connection(c);
 		return 0;
 	}
@@ -601,8 +633,10 @@ int read_handler(connection_t* c)
 	ret = in_buffer.read_buf(fd, err);
 	if(ret < 0)
 	{
+		info_log(" 3333333333333 \n");
 		if(err == kBUFFER_EAGAIN) /* 数据读取错误 */
 		{
+			info_log(" 4444444444444 \n");
 			return kBUFFER_EAGAIN;
 		}
 		
@@ -615,6 +649,7 @@ int read_handler(connection_t* c)
 
 	if(err == kBUFFER_EOF) /* 客户端关闭 */
 	{
+		info_log(" 55555555555555 \n");
 		free_connection(c);
 		return 0;
 	}
@@ -622,21 +657,24 @@ int read_handler(connection_t* c)
 	ret = parse_protocol_handler(c);
 	if(kDECODER_ERROR == ret)
 	{
+		info_log(" 66666666666666 \n");
 		free_connection(c);
 		return -1;
 	}
 	else if(kDECODER_AGAIN == ret)
 	{
+		info_log(" 7777777777777 \n");
 		return 0;
 	}
 
 	client_handler(c);
 
 	buffer_t& out_buf = c->out_buf;
-	// info_log("========>  str len:%lu, buf_len:%d, buf:%s\n", strlen(str), out_buf.readable_size(), out_buf.read_begin());
+	// info_log("========>  buf_len:%d, buf:%s\n", out_buf.readable_size(), out_buf.read_begin());
 	ret = out_buf.write_buf(fd, err);
 	if(ret < 0 && err == kBUFFER_ERROR)
 	{
+		info_log(" 888888888888888 \n");
 		free_connection(c);
 		return -1;
 	}
@@ -1000,8 +1038,8 @@ static void init_signal()
 
 static void init_log()
 {
-	ser.log_p = new log_t();
-	ser.log_p->set_log_path("ser.log");
+	// ser.log_p = new log_t();
+	// ser.log_p->set_log_path("ser.log");
 }
 
 static int init_ser()
@@ -1023,7 +1061,6 @@ static int init_ser()
 	// 	cli_free.push_back(new connection_t);
 	// }
 
-	cycle.next_client_id = 1;
 	cycle.ee_vec.resize(EPOLL_SIZE); /* 调节size */
 	cycle.lfd = socket(AF_INET, SOCK_STREAM, 0);
 	cycle.stop = 0;
@@ -1069,6 +1106,7 @@ static int init_ser()
 	info_log("process[%d] listen lfd[%d] sucess\n", id, cycle.lfd);
 	return 0;
 }
+
 
 int main(int argc, char* argv[])
 {

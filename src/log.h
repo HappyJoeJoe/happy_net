@@ -1,9 +1,12 @@
 #ifndef __LOG_H__
+#define __LOG_H__
 
 #include <stdio.h>
 #include <stdarg.h>
 
 #define LOG_MAX_LEN 1024
+#define default_log_path "ser.log"
+
 
 /* 日志等级 */
 enum log_level

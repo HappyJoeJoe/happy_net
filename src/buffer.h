@@ -13,6 +13,8 @@
 
 /* user defined header */
 #include "error.h"
+// #include "global.h"
+// #include "log.h"
 
 using namespace std;
 
@@ -118,27 +120,14 @@ public:
 		return len;
 	}
 
-	int append_string(const char* ptr)
+	int append_string(const string& str)
 	{
-		size_t len = strlen(ptr);
-
-		return append_string(len, ptr);
+		return append_string(str.length() + 1, str.c_str());
 	}
 
-	int append_string(size_t len, const char* ptr)
+	int append_string(const char* ptr)
 	{
-		if(len > writable_size())
-		{
-			make_space(len);
-		}
-
-		copy(ptr,
-			 ptr + len,
-			 write_begin());
-
-		write_idx_ += len;
-
-		return len;
+		return append_string(strlen(ptr) + 1, ptr);
 	}
 
 	char* read_begin() { return &*buf_.begin() + read_idx_; }
@@ -166,12 +155,12 @@ public:
 
 	int read_len(size_t len)
 	{
-		set_read_idx(len);
+		add_read_idx(len);
 	}
 
 	int write_len(size_t len)
 	{
-		set_write_idx(len);
+		add_write_idx(len);
 	}
 
 	void debug_info()
@@ -190,6 +179,22 @@ public:
 
 private:
 
+	int append_string(size_t len, const char* ptr)
+	{
+		if(len > writable_size())
+		{
+			make_space(len);
+		}
+
+		copy(ptr,
+			 ptr + len - 1,
+			 write_begin());
+
+		add_write_idx(len);
+
+		return len;
+	}
+
 	int has_read()
 	{
 		return read_idx_ - reserve_size;
@@ -199,12 +204,12 @@ private:
 
 	int write_once(int fd, char* buf, int size);
 
-	void set_write_idx(size_t len)
+	void add_write_idx(size_t len)
 	{
 		write_idx_ += len;
 	}
 
-	void set_read_idx(size_t len)
+	void add_read_idx(size_t len)
 	{
 		read_idx_ += len;
 	}
@@ -240,8 +245,6 @@ private:
 	const static int reserve_size = 8;       //预留字段
 	const static int init_size    = 125;    //初始化buf大小
 	const static int max_buffer_read = 16 * 1024;
-
-	
 };
 
 
