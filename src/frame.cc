@@ -82,8 +82,8 @@ typedef struct connection_s   connection_t;
 typedef struct cycle_s        cycle_t;
 
 typedef list<task_t*>		  timer_task_queue_t;
-typedef list<task_t>		  io_task_queue_t;
-typedef list<task_t>		  accept_task_queue_t;
+typedef list<task_t*>		  io_task_queue_t;
+typedef list<task_t*>		  accept_task_queue_t;
 typedef list<connection_t*>   client_free_list_t; //智能指针
 typedef vector<struct  epoll_event>    epoll_event_vec_t;
 typedef map<uint64_t,  set<task_t*>>   timer_queue_t;
@@ -402,7 +402,7 @@ connection_t* get_connection()
 }
 
 /* 一个稍微复杂的过程 */
-int free_connection(connection_t* c)
+int free_connection1(connection_t* c)
 {
 	info_log("free_connection fd:%d\n", c->fd);
 	cycle_t* cycle_p = c->cycle_p;
@@ -423,8 +423,9 @@ int free_connection(connection_t* c)
 }
 
 /* 一个稍微复杂的过程 */
-int free_connection1(connection_t* c)
+int free_connection(connection_t* c)
 {
+	info_log("free_connection fd:%d\n", c->fd);
 	cycle_t* cycle_p = c->cycle_p;
 	int efd 	     = cycle_p->efd;
 	int fd           = c->fd;
@@ -607,10 +608,11 @@ int client_handler(connection_t* c)
 
 int read_handler(connection_t* c)
 {
-	cycle_t* cycle_p = c->cycle_p;
-	event_t* rev     = &c->rev;
-	int efd 	     = cycle_p->efd;
+	cycle_t* cycle_p 	= c->cycle_p;
+	int efd 	     	= cycle_p->efd;
+	event_t* rev     	= &c->rev;
 	buffer_t& in_buffer = c->in_buf;
+	buffer_t& out_buf   = c->out_buf;
 
 	int fd = c->fd;
 	int ret = 0;
@@ -618,65 +620,56 @@ int read_handler(connection_t* c)
 
 	if(rev->timeout) 
 	{
-		info_log(" 1111111111111 \n");
-		free_connection(c);
-		return 0;
+		ret = 0;
+		goto error;
 	}
 
 	if(c->stop)
 	{
-		info_log(" 2222222222222 \n");
-		free_connection(c);
-		return 0;
+		ret = 0;
+		goto error;
 	}
 
 	ret = in_buffer.read_buf(fd, err);
 	if(ret < 0)
 	{
-		info_log(" 3333333333333 \n");
 		if(err == kBUFFER_EAGAIN) /* 数据读取错误 */
 		{
-			info_log(" 4444444444444 \n");
-			return kBUFFER_EAGAIN;
+			ret = kBUFFER_EAGAIN;
 		}
 		
 		/* kBUFFER_ERROR 其他错误直接释放链接 */
 		info_log("buf read error, ret:[%d] errno msg:[%s]\n", ret, strerror(errno));
-		free_connection(c);	
-
-		return -1;
+		
+		ret = -1;
+		goto error;	
 	}
 
 	if(err == kBUFFER_EOF) /* 客户端关闭 */
 	{
-		info_log(" 55555555555555 \n");
-		free_connection(c);
-		return 0;
+		ret = 0;
+		goto error;
 	}
 
 	ret = parse_protocol_handler(c);
 	if(kDECODER_ERROR == ret)
 	{
-		info_log(" 66666666666666 \n");
-		free_connection(c);
-		return -1;
+		ret = -1;
+		goto error;
 	}
 	else if(kDECODER_AGAIN == ret)
 	{
-		info_log(" 7777777777777 \n");
-		return 0;
+		ret = 0;
 	}
 
 	client_handler(c);
 
-	buffer_t& out_buf = c->out_buf;
 	// info_log("========>  buf_len:%d, buf:%s\n", out_buf.readable_size(), out_buf.read_begin());
 	ret = out_buf.write_buf(fd, err);
 	if(ret < 0 && err == kBUFFER_ERROR)
 	{
-		info_log(" 888888888888888 \n");
-		free_connection(c);
-		return -1;
+		ret = -1;
+		goto error;
 	}
 	// info_log("write has_write:%d unwrite:%d\n", ret, out_buf.readable_size());
 	if(out_buf.readable_size() > 0)
@@ -689,8 +682,11 @@ int read_handler(connection_t* c)
 		/* 如果（没有定时器，没有buf么写完的，没有buf要读的，则调用这个，否则设置stop为1）*/
 		c->stop = 1;
 		//否则
-		free_connection(c);
+		goto error;
 	}
+
+error:
+	free_connection(c);
 
 	return ret;
 }
@@ -874,9 +870,10 @@ static int work_process_cycle()
 		}
 
 		/* -------------- accept 事件 -------------- */
-		for_each(accept_task_queue.begin(), accept_task_queue.end(), [](task_t& t) 
+		for_each(accept_task_queue.begin(), accept_task_queue.end(), [](task_t* t) 
 		{
-			((event_handler)t.handler)((connection_t *)t.arg);
+			((event_handler)t->handler)((connection_t *)t->arg);
+			delete t;
 		});
 
 		accept_task_queue.clear();
@@ -920,9 +917,10 @@ static int work_process_cycle()
 		}
 
 		/* -------------- 网络 I/O 的读写事件 -------------- */
-		for_each(io_task_queue.begin(), io_task_queue.end(), [](task_t& t) 
+		for_each(io_task_queue.begin(), io_task_queue.end(), [](task_t* t) 
 		{
-			((event_handler)t.handler)((connection_t *)t.arg);
+			((event_handler)t->handler)((connection_t *)t->arg);
+			delete t;
 		});
 
 		io_task_queue.clear();
@@ -947,8 +945,7 @@ static int work_process_cycle()
 			connection_t* c 		= (connection_t *)ee->data.ptr;
 			int fd 					= c->fd;
 
-			// info_log("loc:[%s] line:[%d] fd[%d] EPOLLIN:[%d], EPOLLOUT:[%d], EPOLLRDHUP:[%d]\n", 
-			// 	__func__, __LINE__, c->fd, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
+			// info_log("loc:[%s] line:[%d] fd[%d] EPOLLIN:[%d], EPOLLOUT:[%d], EPOLLRDHUP:[%d]\n", __func__, __LINE__, c->fd, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
 
 			if(events & EPOLLRDHUP)
 			{
@@ -964,29 +961,29 @@ static int work_process_cycle()
 					c->ready = 1;
 				}
 
-				task_t task;
-				task.handler = (void *)c->rev.handler;
-				task.arg = (void *)c;
+				task_t* t = new task_t;
+				t->handler = (void *)c->rev.handler;
+				t->arg = (void *)c;
 
 				if(c->accept)
 				{
 					// ((event_handler)task.handler)((connection_t *)task.arg);
-					accept_task_queue.push_back(task);
+					accept_task_queue.push_back(t);
 				}
 				else
 				{
 					//加入读事件队列
-					io_task_queue.push_back(task);	
+					io_task_queue.push_back(t);	
 				}
 			}
 			
 			if(events & EPOLLOUT)
 			{
 				/* 加入写事件队列 */
-				task_t task;
-				task.handler = (void *)c->wev.handler;
-				task.arg = (void *)c;
-				io_task_queue.push_back(task);
+				task_t* t;
+				t->handler = (void *)c->wev.handler;
+				t->arg = (void *)c;
+				io_task_queue.push_back(t);
 			}
 		}
 	}
