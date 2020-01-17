@@ -13,8 +13,6 @@
 
 /* user defined header */
 #include "error.h"
-// #include "global.h"
-// #include "log.h"
 
 using namespace std;
 

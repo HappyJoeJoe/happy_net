@@ -74,20 +74,20 @@ using namespace std;
 // }
 
 
-typedef class log        	  log_t;
-typedef struct task_s         task_t;
-typedef struct event_s        event_t;
-typedef class buffer          buffer_t;
-typedef struct connection_s   connection_t;
-typedef struct cycle_s        cycle_t;
+typedef class log        	  	log_t;
+typedef struct task_s         	task_t;
+typedef struct event_s        	event_t;
+typedef class buffer          	buffer_t;
+typedef struct connection_s   	connection_t;
+typedef struct cycle_s        	cycle_t;
 
-typedef list<task_t*>		  timer_task_queue_t;
-typedef list<task_t*>		  io_task_queue_t;
-typedef list<task_t*>		  accept_task_queue_t;
-typedef list<connection_t*>   client_free_list_t; //智能指针
-typedef vector<struct  epoll_event>    epoll_event_vec_t;
-typedef map<uint64_t,  set<task_t*>>   timer_queue_t;
-typedef set<connection_t*>    client_set_t;    //智能指针
+typedef list<task_t>			io_task_queue_t;
+typedef list<task_t>			accept_task_queue_t;
+typedef list<task_t *>			timer_task_queue_t;
+typedef list<connection_t *>	client_free_list_t; //智能指针
+typedef set<connection_t *>		client_set_t;    //智能指针
+typedef vector<struct  epoll_event>		epoll_event_vec_t;
+typedef map<uint64_t,  set<task_t *>>	timer_queue_t;
 
 
 typedef int (*event_handler)(connection_t *);
@@ -189,6 +189,7 @@ typedef struct cycle_s
 {
 	int   efd;           /* epoll fd */
 	int   lfd;           /* listen fd，暂时放在 cycle_t 里，之后放在 server 里 */
+	uint64_t now;        /* 本地时间 */
 	client_set_t            cli_set;           /* 用户字典 */
 	client_free_list_t      cli_free;          /* 空闲连接 */
 
@@ -200,7 +201,7 @@ typedef struct cycle_s
 
 	epoll_event_vec_t       ee_vec;            /* 存储所有 epoll 注册事件 */
 
-	int stop:1;          /* 是否停止 */
+	sig_atomic_t stop:1;          /* 是否停止 */
 } cycle_t;
 
 typedef struct server
@@ -584,7 +585,7 @@ int client_handler(connection_t* c)
 	buffer_t& out_buf = c->out_buf;
 
 	/* ab test */
-	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\nhello jiabo 123456789\r\n";
+	const char* str = "HTTP/1.1 200 OK\r\nServer: Tengine/2.2.2\r\nDate: Tue, 17 Jul 2018 03:02:21 GMT\r\nContent-Type: text/html\r\nContent-Length: 17\r\nConnection: keep-alive\r\n\r\njiabo 123456798\r\n";
 	out_buf.append_string(str);
 	
 	/* 客户端 test */
@@ -759,69 +760,65 @@ void every_timer_func(void* arg)
 	void* func_arg  = t_arg->arg;
 	((event_handler)func)((connection_t *)func_arg);
 
-	if(0 == t_arg->every)
+	if(0 == t_arg->every) 
 	{
+		delete t_arg;
 		return;
 	}
 
-	uint64_t now  = get_curr_msec();
-	uint64_t when = now + t_arg->every * 1000;
+	cycle_t* cycle_p = (cycle_t *)t_arg->ctx;
+	uint64_t when = cycle_p->now + t_arg->every * 1000;
 
-	timer_queue_t& timer_queue = *static_cast<timer_queue_t*>(t_arg->ctx);
-
-	task_t* t  = new task_t;
+	task_t* t = new task_t;
 	t->handler = (void*)every_timer_func;
 	t->arg     = (void*)t_arg;
 
-	timer_queue[when].insert(t);
+	cycle_p->timer_queue[when].insert(t);
 }
 
 /* 1. after: 几秒以后执行
  * 2. every: 每个几秒周期性执行一次
  * 3. func:  执行函数
  * 4. arg:   函数参数 */
-task_t* add_timer(timer_queue_t& timer_queue, uint64_t after, uint64_t every, timer_func func, void* arg)
+void add_timer(cycle_t* cycle, uint64_t after, uint64_t every, timer_func func, const void* arg)
 {
-	uint64_t now  = get_curr_msec();
-	uint64_t when = now + after * 1000;
+	uint64_t when = cycle->now + after * 1000;
 
 	every_timer_arg_t* t_arg = new every_timer_arg_t;
 	t_arg->func  = func;
-	t_arg->arg   = arg;
-	t_arg->ctx   = &timer_queue;
+	t_arg->arg   = const_cast<void*>(arg);
+	t_arg->ctx   = cycle;
 	t_arg->every = every;
 
-	task_t* t  = new task_t;
+	task_t* t = new task_t;
 	t->handler = (void*)every_timer_func;
 	t->arg     = (void*)t_arg;
 
-	timer_queue[when].insert(t);
-
-	return t;
+	cycle->timer_queue[when].insert(t);
 }
 
 void add_event_timer(cycle_t* cycle, uint64_t after, uint64_t every, timer_func func, event_t* ev)
 {
 	ev->timer_set = 1;
-	task_t* t = add_timer(cycle->timer_queue, after, every, func, (void *)ev);
+	add_timer(cycle, after, every, func, (void *)ev);
 	// ev->
 }
 
-int delete_timer(timer_queue_t& timer_queue)
+int delete_timer(cycle_t* cycle, task_t* t)
 {
 	
 }
 
 void tmp_timer(void* arg)
 {
-	info_log("fuck!!!!!!!!!!!\n");
+	printf("%s\n", (const char*)arg);
 }
 
 static int work_process_cycle()
 {
 	int ret = 0;
 	int cnt = 0;
-	int64_t timer = -1;
+	int64_t time_out = -1;
 	
 	timer_queue_t& timer_queue             = cycle.timer_queue;
 	io_task_queue_t& io_task_queue         = cycle.io_task_queue;
@@ -830,7 +827,7 @@ static int work_process_cycle()
 	timer_task_queue_t& timer_task_queue   = cycle.timer_task_queue;
 
 	pid_t id = gettid();
-	info_log("work process id:%d\n", id);
+	// info_log("work process id:%d\n", id);
 	/* todo 子进程搞事情 */
 	int efd = epoll_create1(0);
 
@@ -856,10 +853,16 @@ static int work_process_cycle()
 		return -1;
 	}
 
-	uint64_t now = get_curr_msec();
+	cycle.now = get_curr_msec();
 
 	/* 定时器逻辑，已隐去，若开启去掉注释即可 */
-	// add_timer(timer_queue, 1, 1, tmp_timer, NULL);
+	// add_timer(&cycle, 1, 1, tmp_timer, "every 1 second");
+	// add_timer(&cycle, 5, 5, tmp_timer, "every 5 second");
+	// add_timer(&cycle, 1, 0, tmp_timer, "1 second later");
+	// add_timer(&cycle, 2, 0, tmp_timer, "2 second later");
+	// add_timer(&cycle, 3, 0, tmp_timer, "3 second later");
+	// add_timer(&cycle, 4, 0, tmp_timer, "4 second later");
+	// add_timer(&cycle, 5, 0, tmp_timer, "5 second later");
 
 	while(1)
 	{
@@ -869,69 +872,18 @@ static int work_process_cycle()
 			//todo
 		}
 
-		/* -------------- accept 事件 -------------- */
-		for_each(accept_task_queue.begin(), accept_task_queue.end(), [](task_t* t) 
+		/* -------------- 定时器 解析 -------------- */
+		time_out = -1;
+		timer_queue_t::iterator timer = timer_queue.lower_bound(cycle.now);
+		if(timer != timer_queue.end())
 		{
-			((event_handler)t->handler)((connection_t *)t->arg);
-			delete t;
-		});
-
-		accept_task_queue.clear();
-
-		/* lower_bound: >= 给定 key 的最小指针 
-		 * upper_bound: >  给定 key 的最小指针 */
-		timer_queue_t::iterator timer_end = timer_queue.upper_bound(now);
-		// info_log("now:[%lu], next timer:[%lu]\n", now, timer_end->first);
-		if(now >= timer_end->first)
-		{
-			for_each(timer_queue.begin(), timer_end, [& timer_task_queue](pair<const uint64_t, set<task_t*>>& p)
-			{
-				const set<task_t*>& timer_set = p.second;
-				for_each(timer_set.begin(), timer_set.end(), [& timer_task_queue](task_t* t)
-				{
-					timer_task_queue.push_back(t);
-				});
-			});
-			
-			timer_queue.erase(timer_queue.begin(), timer_end);
-
-			/* -------------- 定时器事件 -------------- */
-			for_each(timer_task_queue.begin(), timer_task_queue.end(), [](task_t* t) 
-			{
-				((event_handler)t->handler)((connection_t *)t->arg);
-				delete t;
-			});
-
-			timer_task_queue.clear();
+			time_out = timer->first - cycle.now;
 		}
 
-		if(timer_queue.size() > 0)
-		{
-			timer_end = timer_queue.lower_bound(now);
-			timer = timer_end->first - now;
-			// info_log("timer:[%lu]\n", timer);
-		}
-		else
-		{
-			timer = -1;
-		}
-
-		/* -------------- 网络 I/O 的读写事件 -------------- */
-		for_each(io_task_queue.begin(), io_task_queue.end(), [](task_t* t) 
-		{
-			((event_handler)t->handler)((connection_t *)t->arg);
-			delete t;
-		});
-
-		io_task_queue.clear();
-
-		// info_log("\n");
 		/* -------------- epoll_wait -------------- */
-		cnt = epoll_wait(efd, &*(ee_vec.begin()), ee_vec.size(), timer);
+		cnt = epoll_wait(efd, &*(ee_vec.begin()), ee_vec.size(), time_out);
 
-		// info_log("epoll cnt[%d]\n", cnt);
-
-		now = get_curr_msec();
+		cycle.now = get_curr_msec();
 
 		if(cnt == ee_vec.size())
 		{
@@ -944,8 +896,6 @@ static int work_process_cycle()
 			uint events 		    = ee->events;
 			connection_t* c 		= (connection_t *)ee->data.ptr;
 			int fd 					= c->fd;
-
-			// info_log("loc:[%s] line:[%d] fd[%d] EPOLLIN:[%d], EPOLLOUT:[%d], EPOLLRDHUP:[%d]\n", __func__, __LINE__, c->fd, events & EPOLLIN, events & EPOLLOUT, events & EPOLLRDHUP);
 
 			if(events & EPOLLRDHUP)
 			{
@@ -961,13 +911,12 @@ static int work_process_cycle()
 					c->ready = 1;
 				}
 
-				task_t* t = new task_t;
-				t->handler = (void *)c->rev.handler;
-				t->arg = (void *)c;
+				task_t t;
+				t.handler = (void *)c->rev.handler;
+				t.arg = (void *)c;
 
 				if(c->accept)
 				{
-					// ((event_handler)task.handler)((connection_t *)task.arg);
 					accept_task_queue.push_back(t);
 				}
 				else
@@ -980,12 +929,46 @@ static int work_process_cycle()
 			if(events & EPOLLOUT)
 			{
 				/* 加入写事件队列 */
-				task_t* t;
-				t->handler = (void *)c->wev.handler;
-				t->arg = (void *)c;
+				task_t t;
+				t.handler = (void *)c->wev.handler;
+				t.arg = (void *)c;
 				io_task_queue.push_back(t);
 			}
 		}
+
+		/* -------------- accept 事件 -------------- */
+		for_each(accept_task_queue.begin(), accept_task_queue.end(), [](task_t& t) 
+		{
+			((event_handler)t.handler)((connection_t *)t.arg);
+		});
+
+		accept_task_queue.clear();
+
+		/* -------------- 定时器事件 -------------- */
+		while(timer != timer_queue.end() && timer->first <= cycle.now) {
+			for_each(timer->second.begin(), timer->second.end(), [& timer_task_queue](task_t* t) 
+			{
+				timer_task_queue.push_back(t);
+			});
+
+			for_each(timer_task_queue.begin(), timer_task_queue.end(), [](task_t* t) 
+			{
+				((event_handler)t->handler)((connection_t *)t->arg);
+				delete t;
+			});
+
+			timer_task_queue.clear();
+
+			timer_queue.erase(timer++);
+		}
+		
+		/* -------------- 网络 I/O 的读写事件 -------------- */
+		for_each(io_task_queue.begin(), io_task_queue.end(), [](task_t& t) 
+		{
+			((event_handler)t.handler)((connection_t *)t.arg);
+		});
+
+		io_task_queue.clear();
 	}
 
 	return 0;
@@ -1100,7 +1083,7 @@ static int init_ser()
 		exit(ret);
 	}
 
-	info_log("process[%d] listen lfd[%d] sucess\n", id, cycle.lfd);
+	// info_log("process[%d] listen lfd[%d] sucess\n", id, cycle.lfd);
 	return 0;
 }
 
@@ -1111,7 +1094,7 @@ int main(int argc, char* argv[])
 	RETURN_CHECK(ret);
 
 	int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
-	info_log("cpu_num=%d\n", cpu_num);
+	// info_log("cpu_num=%d\n", cpu_num);
 
 	/* 为方便调试work进程，暂时先把work进程逻辑放在main流程上 */
 
