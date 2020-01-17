@@ -47,6 +47,9 @@ using namespace std;
 #define IPV4_MASK       (1 << 0)
 #define IPV6_MASK       (1 << 1)
 
+#define TASK_TIMER       (1 << 0)
+#define TASK_IO          (1 << 1)
+
 // #define gettid() syscall(SYS_gettid)  
 
 #define RETURN_CHECK(RET) \
@@ -83,7 +86,6 @@ typedef struct cycle_s        	cycle_t;
 
 typedef list<task_t>			io_task_queue_t;
 typedef list<task_t>			accept_task_queue_t;
-typedef list<task_t *>			timer_task_queue_t;
 typedef list<connection_t *>	client_free_list_t; //智能指针
 typedef set<connection_t *>		client_set_t;    //智能指针
 typedef vector<struct  epoll_event>		epoll_event_vec_t;
@@ -122,7 +124,7 @@ typedef struct task_s
 {
 	void* handler;
 	void* arg;
-	// int   type;
+	int   type;
 } task_t;
 
 /* 读写事件结构体 */
@@ -194,7 +196,6 @@ typedef struct cycle_s
 	client_free_list_t      cli_free;          /* 空闲连接 */
 
 	timer_queue_t 			timer_queue;       /* 定时器存储队列 */
-	timer_task_queue_t      timer_task_queue;  /* 定时器任务队列 */
 
 	io_task_queue_t 		io_task_queue;     /* epoll 激活事件: IO 网络读写事件任务队列 */
 	accept_task_queue_t 	accept_task_queue; /* epoll 激活事件: accept 任务队列 */
@@ -746,7 +747,8 @@ typedef struct every_timer_arg
 	timer_func func;
 	void* arg;
 	void* ctx;
-	uint64_t every;
+	uint32_t every;
+	uint64_t when;
 } every_timer_arg_t;
 
 /* 间隔定时器执行 func
@@ -768,10 +770,13 @@ void every_timer_func(void* arg)
 
 	cycle_t* cycle_p = (cycle_t *)t_arg->ctx;
 	uint64_t when = cycle_p->now + t_arg->every * 1000;
+	t_arg->when = when;
 
 	task_t* t = new task_t;
 	t->handler = (void*)every_timer_func;
 	t->arg     = (void*)t_arg;
+	t->type    = 0;
+	t->type    |= TASK_TIMER;
 
 	cycle_p->timer_queue[when].insert(t);
 }
@@ -780,7 +785,7 @@ void every_timer_func(void* arg)
  * 2. every: 每个几秒周期性执行一次
  * 3. func:  执行函数
  * 4. arg:   函数参数 */
-void add_timer(cycle_t* cycle, uint64_t after, uint64_t every, timer_func func, const void* arg)
+task_t* add_timer(cycle_t* cycle, uint64_t after, uint32_t every, timer_func func, const void* arg)
 {
 	uint64_t when = cycle->now + after * 1000;
 
@@ -789,29 +794,50 @@ void add_timer(cycle_t* cycle, uint64_t after, uint64_t every, timer_func func, 
 	t_arg->arg   = const_cast<void*>(arg);
 	t_arg->ctx   = cycle;
 	t_arg->every = every;
+	t_arg->when  = when;
 
 	task_t* t = new task_t;
 	t->handler = (void*)every_timer_func;
 	t->arg     = (void*)t_arg;
+	t->type    = 0;
+	t->type    |= TASK_TIMER;
 
 	cycle->timer_queue[when].insert(t);
+
+	return t;
 }
 
-void add_event_timer(cycle_t* cycle, uint64_t after, uint64_t every, timer_func func, event_t* ev)
+void add_event_timer(cycle_t* cycle, uint64_t after, uint32_t every, timer_func func, event_t* ev)
 {
 	ev->timer_set = 1;
 	add_timer(cycle, after, every, func, (void *)ev);
 	// ev->
 }
 
-int delete_timer(cycle_t* cycle, task_t* t)
+void delete_timer(cycle_t* cycle, task_t* t)
 {
-	
+	if(t == nullptr || !t->type & TASK_TIMER) return;
+
+	every_timer_arg_t* t_arg = static_cast<every_timer_arg_t*>(t->arg);
+
+	timer_queue_t::iterator it = cycle->timer_queue.find(t_arg->when);
+	if (it == cycle->timer_queue.end()) return;
+
+	cycle->timer_queue.erase(it);
+
+	if(t_arg->every > 0) delete t_arg;
 }
 
 void tmp_timer(void* arg)
 {
 	printf("%s\n", (const char*)arg);
+}
+
+void del_timer(void* arg)
+{
+	task_t* t = static_cast<task_t *>(arg);
+	every_timer_arg_t* t_arg = static_cast<every_timer_arg_t*>(t->arg);
+	delete_timer((cycle_t*)t_arg->ctx, t);
 }
 
 static int work_process_cycle()
@@ -824,7 +850,6 @@ static int work_process_cycle()
 	io_task_queue_t& io_task_queue         = cycle.io_task_queue;
 	accept_task_queue_t& accept_task_queue = cycle.accept_task_queue;
 	epoll_event_vec_t& ee_vec              = cycle.ee_vec;
-	timer_task_queue_t& timer_task_queue   = cycle.timer_task_queue;
 
 	pid_t id = gettid();
 	// info_log("work process id:%d\n", id);
@@ -856,13 +881,16 @@ static int work_process_cycle()
 	cycle.now = get_curr_msec();
 
 	/* 定时器逻辑，已隐去，若开启去掉注释即可 */
-	// add_timer(&cycle, 1, 1, tmp_timer, "every 1 second");
-	// add_timer(&cycle, 5, 5, tmp_timer, "every 5 second");
-	// add_timer(&cycle, 1, 0, tmp_timer, "1 second later");
-	// add_timer(&cycle, 2, 0, tmp_timer, "2 second later");
-	// add_timer(&cycle, 3, 0, tmp_timer, "3 second later");
-	// add_timer(&cycle, 4, 0, tmp_timer, "4 second later");
-	// add_timer(&cycle, 5, 0, tmp_timer, "5 second later");
+	add_timer(&cycle, 1, 1, tmp_timer, "every 1 second");
+	add_timer(&cycle, 5, 5, tmp_timer, "every 5 second");
+	add_timer(&cycle, 1, 0, tmp_timer, "1 second later");
+	add_timer(&cycle, 3, 0, tmp_timer, "3 second later");
+	add_timer(&cycle, 5, 0, tmp_timer, "5 second later");
+
+	task_t* t4 = add_timer(&cycle, 4, 0, tmp_timer, "4 second later");
+	add_timer(&cycle, 2, 0, del_timer, t4);
+	//重复删除
+	add_timer(&cycle, 4, 0, del_timer, t4);
 
 	while(1)
 	{
@@ -890,6 +918,52 @@ static int work_process_cycle()
 			ee_vec.resize(ee_vec.size() * 2);
 		}
 
+		// for_each_n(ee_vec.begin(), cnt, [&](struct epoll_event& ee){
+		// 	uint events 		    = ee.events;
+		// 	connection_t* c 		= (connection_t *)ee.data.ptr;
+		// 	int fd 					= c->fd;
+
+		// 	if(events & EPOLLIN)
+		// 	{
+		// 		if(!c->ready)
+		// 		{
+		// 			c->ready = 1;
+		// 		}
+
+		// 		task_t t;
+		// 		t.handler = (void *)c->rev.handler;
+		// 		t.arg = (void *)c;
+		// 		t.type = 0;
+		// 		t.type |= TASK_IO;
+
+		// 		if(c->accept)
+		// 		{
+		// 			accept_task_queue.push_back(t);
+		// 		}
+		// 		else
+		// 		{
+		// 			//加入读事件队列
+		// 			io_task_queue.push_back(t);	
+		// 		}
+		// 	}
+			
+		// 	if(events & EPOLLOUT)
+		// 	{
+		// 		/* 加入写事件队列 */
+		// 		task_t t;
+		// 		t.handler = (void *)c->wev.handler;
+		// 		t.arg = (void *)c;
+		// 		t.type = 0;
+		// 		t.type |= TASK_IO;
+		// 		io_task_queue.push_back(t);
+		// 	}
+
+		// 	if(events & EPOLLRDHUP)
+		// 	{
+		// 		free_connection(c);
+		// 	}
+		// });
+
 		for (int i = 0; i < cnt; ++i)
 		{
 			struct epoll_event* ee 	= &ee_vec[i];
@@ -914,6 +988,8 @@ static int work_process_cycle()
 				task_t t;
 				t.handler = (void *)c->rev.handler;
 				t.arg = (void *)c;
+				t.type = 0;
+				t.type |= TASK_IO;
 
 				if(c->accept)
 				{
@@ -932,6 +1008,8 @@ static int work_process_cycle()
 				task_t t;
 				t.handler = (void *)c->wev.handler;
 				t.arg = (void *)c;
+				t.type = 0;
+				t.type |= TASK_IO;
 				io_task_queue.push_back(t);
 			}
 		}
@@ -946,18 +1024,12 @@ static int work_process_cycle()
 
 		/* -------------- 定时器事件 -------------- */
 		while(timer != timer_queue.end() && timer->first <= cycle.now) {
-			for_each(timer->second.begin(), timer->second.end(), [& timer_task_queue](task_t* t) 
-			{
-				timer_task_queue.push_back(t);
-			});
 
-			for_each(timer_task_queue.begin(), timer_task_queue.end(), [](task_t* t) 
+			for_each(timer->second.begin(), timer->second.end(), [](task_t* t)
 			{
 				((event_handler)t->handler)((connection_t *)t->arg);
 				delete t;
 			});
-
-			timer_task_queue.clear();
 
 			timer_queue.erase(timer++);
 		}
