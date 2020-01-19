@@ -14,7 +14,7 @@ int buffer::read_once(int fd, char* buf, int size)
 			err = errno;
 			if(EAGAIN == err)
 			{
-				// info_log("%s|%s|%d  EAGAIN  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
+				// printf("%s|%s|%d  EAGAIN  n_read:%d\n", __FILE__, __func__, __LINE__, n_read);
 				return kBUFFER_EAGAIN;
 			}
 			else if(EINTR == err)

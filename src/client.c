@@ -91,40 +91,5 @@ int main(int argc, char const *argv[])
 
 	close(fd);
 
-	// int efd = epoll_create(1024);
-	// struct epoll_event* p_ee = (struct epoll_event *)malloc(sizeof(struct epoll_event) * 1024);
-
-	// struct epoll_event ee = 
-	// {
-	// 	EPOLLIN,
-	// 	STDIN_FILENO
-	// };
-
-	// ret = epoll_ctl(efd, EPOLL_CTL_ADD, STDIN_FILENO, &ee);
-
-	
-	// // ret = write(fd, buf, sizeof(buf));
-
-	// while(1)
-	// {
-	// 	int cnt = epoll_wait(efd, p_ee, 1024, -1);
-	// 	for (int i = 0; i < cnt; ++i)
-	// 	{
-	// 		struct epoll_event* e = &p_ee[i];
-	// 		if(e->data.fd = STDIN_FILENO)
-	// 		{
-	// 			char buf[128] = {0};
-	// 			ret = read(STDIN_FILENO, buf, sizeof(buf));
-	// 			printf("读入[%s]\n", buf);
-	// 			ret = write(fd, buf, sizeof(buf));
-	// 		}
-	// 		// char tmp[128] = {0};
-	// 		// ret = read(fd, tmp, sizeof(tmp));
-	// 	 // 	printf("read tmp[%s]\n", tmp);
-
-			
-	// 	}
-	// }
-
 	return 0;
 }
