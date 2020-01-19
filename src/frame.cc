@@ -28,6 +28,7 @@
 #include "comm_basic.pb.h"
 
 using namespace std;
+using namespace common;
 
 #define OPEN_FD_LIMIT   10000       /* to configure */
 #define PORT 			8888        /* to configure */
@@ -74,7 +75,8 @@ typedef void (*timer_func_t)(void *);
 //函数声明
 void del_event_timer(cycle_t* cycle, event_t* ev);
 void conn_time_out(void *);
-void add_event_timer(cycle_t* cycle, uint32_t after, uint32_t every, timer_func_t func, event_t* ev);
+void add_event_timer(cycle_t* cycle, uint32_t after, timer_func_t func, event_t* ev);
+int free_connection(connection_t* c);
 
 /*  todo 
  *  accept 解析对端 ip:port，协议类型
@@ -101,8 +103,10 @@ void add_event_timer(cycle_t* cycle, uint32_t after, uint32_t every, timer_func_
  *  2. 内存泄漏 bug  [已解决 - √]
  *  3. 定时器统一时间添加多个只能执行一个  [已解决 - √] */
 
+/* 定时器 */
 typedef struct timer_s
 {
+	uint64_t when;
 	void* handler;
 	void* arg;
 } mtimer_t;
@@ -117,7 +121,7 @@ typedef struct event_s
 	int timeout:1;			/* 是否超时 */
 	mtimer_t timer;			/* 定时器 */
 	int posted:1;			/* 是否放入了任务队列 */
-	event_pos pos;
+	int stop:1;             /* 停止事件 */
 } event_t;
 
 typedef struct ip_addr
@@ -153,8 +157,8 @@ typedef struct connection_s
 	buffer_t in_buf;		/* 网络包读缓冲区 */
 	buffer_t out_buf;		/* 网络包写缓冲区 */
 
-	request_t req;			/* 请求体 */
-	response_t resp;		/* 应答体 */
+	comm_request req;			/* 请求体 */
+	comm_response resp;		/* 应答体 */
 
 	event_t rev;			/* 读事件 */
 	event_t wev;			/* 写事件 */
@@ -379,59 +383,6 @@ connection_t* get_connection(cycle_t* cycle)
 	return c;
 }
 
-/* 一个稍微复杂的过程 */
-int free_connection(connection_t* c)
-{
-	printf("free_connection fd:%d\n", c->fd);
-	cycle_t* cycle = c->cycle;
-	int efd 	     = cycle->efd;
-	int fd           = c->fd;
-
-	if(-1 == fd) return 0;
-
-	/* 从字典里删除 */
-	cycle->cli_set.erase(c);
-
-	/* 空闲连接回收结点 */
-	cycle->conn_free.push_back(c);
-
-	/* 1. 删除读写事件 */
-	c->rev.handler = empty_handler;
-	c->wev.handler = empty_handler;
-
-	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
-
-	/* 1. 删除 读/写 事件定时器 */
-	if(c->rev.timer_set) 
-	{
-		del_event_timer(cycle, &(c->rev));
-	}
-
-	if(c->wev.timer_set)
-	{
-		del_event_timer(cycle, &(c->wev));
-	}
-
-	/* 2. 删除 读/写 IO事件 post 队列 */
-	if(c->rev.posted)
-	{
-		c->rev.posted = 0;
-		cycle->io_task_queue.erase(c->rev.pos);
-	}
-
-	if(c->wev.posted)
-	{
-		c->wev.posted = 0;
-		cycle->io_task_queue.erase(c->wev.pos);
-	}
-
-	/* . close fd */
-	close(fd);
-	c->fd = -1;
-
-	return 0;
-}
-
 int accept_handler(connection_t* lc)
 {
 	/* 如果是监听事件，优先处理 */
@@ -497,7 +448,7 @@ int accept_handler(connection_t* lc)
 			exit(-1);
 		}
 
-		add_event_timer(cycle, 3000, 0, conn_time_out, rev);
+		add_event_timer(cycle, 3000, conn_time_out, rev);
 	}
 
 	return 0;
@@ -538,9 +489,7 @@ int parse_protocol_handler(connection_t* c)
 	in_buffer.get_string(ret, buf);
 	in_buffer.read_len(strlen(CLRF));
 
-	common::comm_request* req = new common::comm_request();
-	req->ParseFromString(buf);
-	c->req.data = req;
+	c->req.ParseFromString(buf);
 
 	return 0;
 }
@@ -555,23 +504,19 @@ int client_handler(connection_t* c)
 	// out_buf.append_string(str);
 	
 	/* 客户端 test */
-	common::comm_request* req = (common::comm_request*)c->req.data;
 	printf("---------- read ----------\n");
-	req->PrintDebugString();
+	c->req.PrintDebugString();
 	
-	common::comm_response resp;
-	resp.mutable_head()->set_err_code(1);
-	resp.mutable_head()->set_err_msg("ok");
-	string tmp = req->body();
+	c->resp.mutable_head()->set_err_code(1);
+	c->resp.mutable_head()->set_err_msg("ok");
+	string tmp = c->req.body();
 	reverse(begin(tmp), end(tmp));
-	resp.set_body("=== " + tmp + " ===");
+	c->resp.set_body("=== " + tmp + " ===");
 	string str;
-	resp.SerializeToString(&str);
+	c->resp.SerializeToString(&str);
 	out_buf.append_string(str.c_str());
 	out_buf.append_string(CLRF);
 
-	delete req;
-	
 	return 0;
 }
 
@@ -706,107 +651,88 @@ static uint64_t get_curr_msec()
 	return msec;
 }
 
-typedef struct timer_arg
-{
-	timer_func_t func;
-	void* arg;
-	void* ctx;
-	uint32_t every;
-	uint64_t when;
-} timer_arg_t;
-
-/* 间隔定时器执行 func
- * 1. 执行 func
- * 2. 重新计算定时器，再次插入 func */
-void timer_func(void* arg)
-{
-	timer_arg_t* t_arg = static_cast<timer_arg_t*>(arg);
-
-	((event_handler_t)t_arg->func)((connection_t *)t_arg->arg);
-
-	if(0 == t_arg->every) 
-	{
-		delete t_arg;
-		return;
-	}
-
-	cycle_t* cycle = (cycle_t *)t_arg->ctx;
-	uint64_t when = cycle->now + t_arg->every;
-	t_arg->when = when;
-
-	mtimer_t* t = new mtimer_t;
-	t->handler = (void*)timer_func;
-	t->arg     = (void*)t_arg;
-	cycle->timer_queue[when].insert(t);
-}
-
-/* 1. after: 几毫秒以后执行
- * 2. every: 每个几毫秒周期性执行一次
- * 3. func:  执行函数
- * 4. arg:   函数参数 */
-mtimer_t* add_timer(cycle_t* cycle, uint64_t after, uint32_t every, timer_func_t func, const void* arg)
-{
-	uint64_t when = cycle->now + after;
-
-	timer_arg_t* t_arg = new timer_arg_t;
-	t_arg->func  = func;
-	t_arg->arg   = const_cast<void*>(arg);
-	t_arg->ctx   = cycle;
-	t_arg->every = every;
-	t_arg->when  = when;
-
-	mtimer_t* t = new mtimer_t;
-	t->handler = (void*)timer_func;
-	t->arg     = (void*)t_arg;
-
-	cycle->timer_queue[when].insert(t);
-
-	return t;
-}
-
-void del_timer(cycle_t* cycle, mtimer_t* t)
-{
-	if(t == nullptr) return;
-
-	timer_arg_t* t_arg = static_cast<timer_arg_t*>(t->arg);
-
-	timer_queue_t::iterator it = cycle->timer_queue.find(t_arg->when);
-	if (it == cycle->timer_queue.end()) return;
-
-	cycle->timer_queue.erase(it);
-
-	if(t_arg->every > 0) delete t_arg;
-}
-
-void add_event_timer(cycle_t* cycle, uint32_t after, uint32_t every, timer_func_t func, event_t* ev)
+void add_event_timer(cycle_t* cycle, uint32_t after, timer_func_t func, event_t* ev)
 {
 	ev->timer_set = 1;
-	add_timer(cycle, after, every, func, (void *)ev);
+
+	mtimer_t* t = &(ev->timer);
+	t->handler = (void *)func;
+	t->arg     = static_cast<event_t *>(ev);
+	t->when    = cycle->now + after;
+
+	cycle->timer_queue[t->when].insert(t);
 }
 
 void del_event_timer(cycle_t* cycle, event_t* ev)
 {
 	ev->timer_set = 0;
-	del_timer(cycle, &(ev->timer));
+
+	mtimer_t* t = &(ev->timer);
+
+	timer_queue_t::iterator it = cycle->timer_queue.find(t->when);
+	if (it == cycle->timer_queue.end()) return;
+
+	cycle->timer_queue.erase(it);
+}
+
+/* 一个稍微复杂的过程 */
+int free_connection(connection_t* c)
+{
+	printf("free_connection fd:%d\n", c->fd);
+	cycle_t* cycle = c->cycle;
+	int efd 	     = cycle->efd;
+	int fd           = c->fd;
+
+	if(-1 == fd) return 0;
+
+	/* 从字典里删除 */
+	cycle->cli_set.erase(c);
+
+	/* 空闲连接回收结点 */
+	cycle->conn_free.push_back(c);
+
+	/* 1. 删除读写事件 */
+	c->rev.handler = empty_handler;
+	c->wev.handler = empty_handler;
+
+	epoll_delete_event(c, efd, fd, READ_EVENT|WRITE_EVENT);
+
+	/* 1. 删除 读/写 事件定时器 */
+	if(c->rev.timer_set) 
+	{
+		del_event_timer(cycle, &(c->rev));
+	}
+
+	if(c->wev.timer_set)
+	{
+		del_event_timer(cycle, &(c->wev));
+	}
+
+	/* 2. 删除 读/写 IO事件 post 队列 */
+	if(c->rev.posted)
+	{
+		c->rev.posted = 0;
+		c->rev.stop = 1;
+	}
+
+	if(c->wev.posted)
+	{
+		c->wev.posted = 0;
+		c->rev.stop = 1;
+	}
+
+	/* . close fd */
+	close(fd);
+	c->fd = -1;
+
+	return 0;
 }
 
 void conn_time_out(void* arg)
 {
-	event_t* rev = static_cast<event_t *>(arg);;
-	connection_t* c = static_cast<connection_t *>(rev->arg);
+	event_t* ev = static_cast<event_t *>(arg);
+	connection_t* c = static_cast<connection_t *>(ev->arg);
 	if(!c->ready) free_connection(c);
-}
-
-void tmp_timer(void* arg)
-{
-	printf("%s\n", (const char*)arg);
-}
-
-void del_timer_test(void* arg)
-{
-	mtimer_t* t = static_cast<mtimer_t *>(arg);
-	timer_arg_t* t_arg = static_cast<timer_arg_t*>(t->arg);
-	del_timer((cycle_t*)t_arg->ctx, t);
 }
 
 static int work_process_cycle(cycle_t* cycle)
@@ -847,18 +773,6 @@ static int work_process_cycle(cycle_t* cycle)
 	}
 
 	cycle->now = get_curr_msec();
-
-	/* 定时器逻辑，已隐去，若开启去掉注释即可 */
-	// add_timer(cycle, 1000, 1000, tmp_timer, "every 1 second");
-	// add_timer(cycle, 5000, 5000, tmp_timer, "every 5 second");
-	// add_timer(cycle, 1000, 0, tmp_timer, "1 second later");
-	// add_timer(cycle, 3000, 0, tmp_timer, "3 second later");
-	// add_timer(cycle, 5000, 0, tmp_timer, "5 second later");
-
-	// mtimer_t* t4 = add_timer(cycle, 4000, 0, tmp_timer, "4 second later");
-	// add_timer(cycle, 2000, 0, del_timer_test, t4);
-	//重复删除
-	// add_timer(cycle, 4000, 0, del_timer_test, t4);
 
 	while(1)
 	{
@@ -909,22 +823,22 @@ static int work_process_cycle(cycle_t* cycle)
 
 				if(c->accept)
 				{
-					c->rev.pos = accept_task_queue.insert(accept_task_queue.end(), &(c->rev));
 					c->rev.posted = 1;
+					accept_task_queue.insert(accept_task_queue.end(), &(c->rev));
 				}
 				else
 				{
 					//加入读事件队列
-					c->rev.pos = io_task_queue.insert(io_task_queue.end(), &(c->rev));
 					c->rev.posted = 1;
+					io_task_queue.insert(io_task_queue.end(), &(c->rev));
 				}
 			}
 			
 			if(events & EPOLLOUT)
 			{
 				/* 加入写事件队列 */
-				c->wev.pos = io_task_queue.insert(io_task_queue.end(), &(c->wev));
 				c->wev.posted = 1;
+				io_task_queue.insert(io_task_queue.end(), &(c->wev));
 			}
 		}
 
@@ -938,15 +852,14 @@ static int work_process_cycle(cycle_t* cycle)
 		}
 
 		/* -------------- 定时器事件 -------------- */
-		while(timer != timer_queue.end() && timer->first <= cycle->now) {
+		while((timer = timer_queue.lower_bound(0)) != timer_queue.end() && timer->first <= cycle->now) {
+
+			timer_queue.erase(timer);
 
 			for_each(timer->second.begin(), timer->second.end(), [](mtimer_t* t)
 			{
 				((event_handler_t)t->handler)((connection_t *)t->arg);
-				delete t;
 			});
-
-			timer_queue.erase(timer++);
 		}
 		
 		/* -------------- 网络 I/O 的读写事件 -------------- */
