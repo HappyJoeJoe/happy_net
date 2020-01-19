@@ -121,7 +121,7 @@ typedef struct event_s
 	int timeout:1;			/* 是否超时 */
 	mtimer_t timer;			/* 定时器 */
 	int posted:1;			/* 是否放入了任务队列 */
-	int stop:1;             /* 停止事件 */
+	event_pos pos;
 } event_t;
 
 typedef struct ip_addr
@@ -712,13 +712,13 @@ int free_connection(connection_t* c)
 	if(c->rev.posted)
 	{
 		c->rev.posted = 0;
-		c->rev.stop = 1;
+		cycle->io_task_queue.erase(c->rev.pos);
 	}
 
 	if(c->wev.posted)
 	{
 		c->wev.posted = 0;
-		c->rev.stop = 1;
+		cycle->io_task_queue.erase(c->wev.pos);
 	}
 
 	/* . close fd */
@@ -824,13 +824,13 @@ static int work_process_cycle(cycle_t* cycle)
 				if(c->accept)
 				{
 					c->rev.posted = 1;
-					accept_task_queue.insert(accept_task_queue.end(), &(c->rev));
+					c->rev.pos = accept_task_queue.insert(accept_task_queue.end(), &(c->rev));
 				}
 				else
 				{
 					//加入读事件队列
 					c->rev.posted = 1;
-					io_task_queue.insert(io_task_queue.end(), &(c->rev));
+					c->rev.pos = io_task_queue.insert(io_task_queue.end(), &(c->rev));
 				}
 			}
 			
@@ -838,7 +838,7 @@ static int work_process_cycle(cycle_t* cycle)
 			{
 				/* 加入写事件队列 */
 				c->wev.posted = 1;
-				io_task_queue.insert(io_task_queue.end(), &(c->wev));
+				c->wev.pos = io_task_queue.insert(io_task_queue.end(), &(c->wev));
 			}
 		}
 
