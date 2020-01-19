@@ -19,15 +19,10 @@ using namespace std;
 class buffer
 {
 public:
-	typedef vector<char>::iterator buffer_it;
-
 	explicit buffer() : 
 		read_idx_(reserve_size), 
 		write_idx_(reserve_size), 
-		buf_(reserve_size + init_size) 
-	{
-
-	}
+		buf_(reserve_size + init_size) {}
 
 	template<typename T>
 	int peek(T& t) 
@@ -118,14 +113,16 @@ public:
 		return len;
 	}
 
+	/* 把去掉'\0'截止符的字符串放进去 */
 	int append_string(const string& str)
 	{
-		return append_string(str.length() + 1, str.c_str());
+		return append_string(str.length(), str.c_str());
 	}
 
+	/* 把去掉'\0'截止符的字符串放进去 */
 	int append_string(const char* ptr)
 	{
-		return append_string(strlen(ptr) + 1, ptr);
+		return append_string(strlen(ptr), ptr);
 	}
 
 	char* read_begin() { return &*buf_.begin() + read_idx_; }
@@ -185,7 +182,7 @@ private:
 		}
 
 		copy(ptr,
-			 ptr + len - 1,
+			 ptr + len,
 			 write_begin());
 
 		add_write_idx(len);
@@ -216,7 +213,8 @@ private:
 	{
 		assert(read_idx_ >= reserve_size);
 
-		/* 已读区域 + 待写区域 >= 待写入数据长度 */
+		/* 已读区域 + 待写区域 >= 待写入数据长度
+		 * 则将可读区域重新移到 begin + reserve_size 处 */
 		if(has_read() + writable_size() >= len)
 		{
 			int origin_readable_size = readable_size();

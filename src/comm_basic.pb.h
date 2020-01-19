@@ -103,13 +103,6 @@ class comm_req :
     return *this;
   }
 
-  inline const ::PROTOBUF_NAMESPACE_ID::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-  inline ::PROTOBUF_NAMESPACE_ID::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
   }
@@ -194,22 +187,19 @@ class comm_req :
 
   // accessors -------------------------------------------------------
 
-  // optional int32 ver = 1;
-  bool has_ver() const;
+  // int32 ver = 1;
   void clear_ver();
   static const int kVerFieldNumber = 1;
   ::PROTOBUF_NAMESPACE_ID::int32 ver() const;
   void set_ver(::PROTOBUF_NAMESPACE_ID::int32 value);
 
-  // optional int32 cmd = 2;
-  bool has_cmd() const;
+  // int32 cmd = 2;
   void clear_cmd();
   static const int kCmdFieldNumber = 2;
   ::PROTOBUF_NAMESPACE_ID::int32 cmd() const;
   void set_cmd(::PROTOBUF_NAMESPACE_ID::int32 value);
 
-  // optional int32 sub_cmd = 3;
-  bool has_sub_cmd() const;
+  // int32 sub_cmd = 3;
   void clear_sub_cmd();
   static const int kSubCmdFieldNumber = 3;
   ::PROTOBUF_NAMESPACE_ID::int32 sub_cmd() const;
@@ -220,11 +210,10 @@ class comm_req :
   class HasBitSetters;
 
   ::PROTOBUF_NAMESPACE_ID::internal::InternalMetadataWithArena _internal_metadata_;
-  ::PROTOBUF_NAMESPACE_ID::internal::HasBits<1> _has_bits_;
-  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   ::PROTOBUF_NAMESPACE_ID::int32 ver_;
   ::PROTOBUF_NAMESPACE_ID::int32 cmd_;
   ::PROTOBUF_NAMESPACE_ID::int32 sub_cmd_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_comm_5fbasic_2eproto;
 };
 // -------------------------------------------------------------------
@@ -252,13 +241,6 @@ class comm_resp :
       CopyFrom(from);
     }
     return *this;
-  }
-
-  inline const ::PROTOBUF_NAMESPACE_ID::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-  inline ::PROTOBUF_NAMESPACE_ID::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
@@ -345,8 +327,7 @@ class comm_resp :
 
   // accessors -------------------------------------------------------
 
-  // optional string err_msg = 2;
-  bool has_err_msg() const;
+  // string err_msg = 2;
   void clear_err_msg();
   static const int kErrMsgFieldNumber = 2;
   const std::string& err_msg() const;
@@ -358,8 +339,7 @@ class comm_resp :
   std::string* release_err_msg();
   void set_allocated_err_msg(std::string* err_msg);
 
-  // optional int32 err_code = 1;
-  bool has_err_code() const;
+  // int32 err_code = 1;
   void clear_err_code();
   static const int kErrCodeFieldNumber = 1;
   ::PROTOBUF_NAMESPACE_ID::int32 err_code() const;
@@ -370,10 +350,9 @@ class comm_resp :
   class HasBitSetters;
 
   ::PROTOBUF_NAMESPACE_ID::internal::InternalMetadataWithArena _internal_metadata_;
-  ::PROTOBUF_NAMESPACE_ID::internal::HasBits<1> _has_bits_;
-  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr err_msg_;
   ::PROTOBUF_NAMESPACE_ID::int32 err_code_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_comm_5fbasic_2eproto;
 };
 // -------------------------------------------------------------------
@@ -401,13 +380,6 @@ class comm_request :
       CopyFrom(from);
     }
     return *this;
-  }
-
-  inline const ::PROTOBUF_NAMESPACE_ID::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-  inline ::PROTOBUF_NAMESPACE_ID::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
@@ -494,8 +466,7 @@ class comm_request :
 
   // accessors -------------------------------------------------------
 
-  // optional string body = 2;
-  bool has_body() const;
+  // string body = 2;
   void clear_body();
   static const int kBodyFieldNumber = 2;
   const std::string& body() const;
@@ -507,7 +478,7 @@ class comm_request :
   std::string* release_body();
   void set_allocated_body(std::string* body);
 
-  // optional .common.comm_req head = 1;
+  // .common.comm_req head = 1;
   bool has_head() const;
   void clear_head();
   static const int kHeadFieldNumber = 1;
@@ -521,10 +492,9 @@ class comm_request :
   class HasBitSetters;
 
   ::PROTOBUF_NAMESPACE_ID::internal::InternalMetadataWithArena _internal_metadata_;
-  ::PROTOBUF_NAMESPACE_ID::internal::HasBits<1> _has_bits_;
-  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr body_;
   ::common::comm_req* head_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_comm_5fbasic_2eproto;
 };
 // -------------------------------------------------------------------
@@ -552,13 +522,6 @@ class comm_response :
       CopyFrom(from);
     }
     return *this;
-  }
-
-  inline const ::PROTOBUF_NAMESPACE_ID::UnknownFieldSet& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-  inline ::PROTOBUF_NAMESPACE_ID::UnknownFieldSet* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
@@ -645,8 +608,7 @@ class comm_response :
 
   // accessors -------------------------------------------------------
 
-  // optional string body = 2;
-  bool has_body() const;
+  // string body = 2;
   void clear_body();
   static const int kBodyFieldNumber = 2;
   const std::string& body() const;
@@ -658,7 +620,7 @@ class comm_response :
   std::string* release_body();
   void set_allocated_body(std::string* body);
 
-  // optional .common.comm_resp head = 1;
+  // .common.comm_resp head = 1;
   bool has_head() const;
   void clear_head();
   static const int kHeadFieldNumber = 1;
@@ -672,10 +634,9 @@ class comm_response :
   class HasBitSetters;
 
   ::PROTOBUF_NAMESPACE_ID::internal::InternalMetadataWithArena _internal_metadata_;
-  ::PROTOBUF_NAMESPACE_ID::internal::HasBits<1> _has_bits_;
-  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr body_;
   ::common::comm_resp* head_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_comm_5fbasic_2eproto;
 };
 // ===================================================================
@@ -689,56 +650,44 @@ class comm_response :
 #endif  // __GNUC__
 // comm_req
 
-// optional int32 ver = 1;
-inline bool comm_req::has_ver() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
+// int32 ver = 1;
 inline void comm_req::clear_ver() {
   ver_ = 0;
-  _has_bits_[0] &= ~0x00000001u;
 }
 inline ::PROTOBUF_NAMESPACE_ID::int32 comm_req::ver() const {
   // @@protoc_insertion_point(field_get:common.comm_req.ver)
   return ver_;
 }
 inline void comm_req::set_ver(::PROTOBUF_NAMESPACE_ID::int32 value) {
-  _has_bits_[0] |= 0x00000001u;
+  
   ver_ = value;
   // @@protoc_insertion_point(field_set:common.comm_req.ver)
 }
 
-// optional int32 cmd = 2;
-inline bool comm_req::has_cmd() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
+// int32 cmd = 2;
 inline void comm_req::clear_cmd() {
   cmd_ = 0;
-  _has_bits_[0] &= ~0x00000002u;
 }
 inline ::PROTOBUF_NAMESPACE_ID::int32 comm_req::cmd() const {
   // @@protoc_insertion_point(field_get:common.comm_req.cmd)
   return cmd_;
 }
 inline void comm_req::set_cmd(::PROTOBUF_NAMESPACE_ID::int32 value) {
-  _has_bits_[0] |= 0x00000002u;
+  
   cmd_ = value;
   // @@protoc_insertion_point(field_set:common.comm_req.cmd)
 }
 
-// optional int32 sub_cmd = 3;
-inline bool comm_req::has_sub_cmd() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
+// int32 sub_cmd = 3;
 inline void comm_req::clear_sub_cmd() {
   sub_cmd_ = 0;
-  _has_bits_[0] &= ~0x00000004u;
 }
 inline ::PROTOBUF_NAMESPACE_ID::int32 comm_req::sub_cmd() const {
   // @@protoc_insertion_point(field_get:common.comm_req.sub_cmd)
   return sub_cmd_;
 }
 inline void comm_req::set_sub_cmd(::PROTOBUF_NAMESPACE_ID::int32 value) {
-  _has_bits_[0] |= 0x00000004u;
+  
   sub_cmd_ = value;
   // @@protoc_insertion_point(field_set:common.comm_req.sub_cmd)
 }
@@ -747,77 +696,66 @@ inline void comm_req::set_sub_cmd(::PROTOBUF_NAMESPACE_ID::int32 value) {
 
 // comm_resp
 
-// optional int32 err_code = 1;
-inline bool comm_resp::has_err_code() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
+// int32 err_code = 1;
 inline void comm_resp::clear_err_code() {
   err_code_ = 0;
-  _has_bits_[0] &= ~0x00000002u;
 }
 inline ::PROTOBUF_NAMESPACE_ID::int32 comm_resp::err_code() const {
   // @@protoc_insertion_point(field_get:common.comm_resp.err_code)
   return err_code_;
 }
 inline void comm_resp::set_err_code(::PROTOBUF_NAMESPACE_ID::int32 value) {
-  _has_bits_[0] |= 0x00000002u;
+  
   err_code_ = value;
   // @@protoc_insertion_point(field_set:common.comm_resp.err_code)
 }
 
-// optional string err_msg = 2;
-inline bool comm_resp::has_err_msg() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
+// string err_msg = 2;
 inline void comm_resp::clear_err_msg() {
   err_msg_.ClearToEmptyNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-  _has_bits_[0] &= ~0x00000001u;
 }
 inline const std::string& comm_resp::err_msg() const {
   // @@protoc_insertion_point(field_get:common.comm_resp.err_msg)
   return err_msg_.GetNoArena();
 }
 inline void comm_resp::set_err_msg(const std::string& value) {
-  _has_bits_[0] |= 0x00000001u;
+  
   err_msg_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:common.comm_resp.err_msg)
 }
 inline void comm_resp::set_err_msg(std::string&& value) {
-  _has_bits_[0] |= 0x00000001u;
+  
   err_msg_.SetNoArena(
     &::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:common.comm_resp.err_msg)
 }
 inline void comm_resp::set_err_msg(const char* value) {
   GOOGLE_DCHECK(value != nullptr);
-  _has_bits_[0] |= 0x00000001u;
+  
   err_msg_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:common.comm_resp.err_msg)
 }
 inline void comm_resp::set_err_msg(const char* value, size_t size) {
-  _has_bits_[0] |= 0x00000001u;
+  
   err_msg_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:common.comm_resp.err_msg)
 }
 inline std::string* comm_resp::mutable_err_msg() {
-  _has_bits_[0] |= 0x00000001u;
+  
   // @@protoc_insertion_point(field_mutable:common.comm_resp.err_msg)
   return err_msg_.MutableNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 }
 inline std::string* comm_resp::release_err_msg() {
   // @@protoc_insertion_point(field_release:common.comm_resp.err_msg)
-  if (!has_err_msg()) {
-    return nullptr;
-  }
-  _has_bits_[0] &= ~0x00000001u;
-  return err_msg_.ReleaseNonDefaultNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
+  
+  return err_msg_.ReleaseNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 }
 inline void comm_resp::set_allocated_err_msg(std::string* err_msg) {
   if (err_msg != nullptr) {
-    _has_bits_[0] |= 0x00000001u;
+    
   } else {
-    _has_bits_[0] &= ~0x00000001u;
+    
   }
   err_msg_.SetAllocatedNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), err_msg);
   // @@protoc_insertion_point(field_set_allocated:common.comm_resp.err_msg)
@@ -827,13 +765,15 @@ inline void comm_resp::set_allocated_err_msg(std::string* err_msg) {
 
 // comm_request
 
-// optional .common.comm_req head = 1;
+// .common.comm_req head = 1;
 inline bool comm_request::has_head() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return this != internal_default_instance() && head_ != nullptr;
 }
 inline void comm_request::clear_head() {
-  if (head_ != nullptr) head_->Clear();
-  _has_bits_[0] &= ~0x00000002u;
+  if (GetArenaNoVirtual() == nullptr && head_ != nullptr) {
+    delete head_;
+  }
+  head_ = nullptr;
 }
 inline const ::common::comm_req& comm_request::head() const {
   const ::common::comm_req* p = head_;
@@ -843,13 +783,13 @@ inline const ::common::comm_req& comm_request::head() const {
 }
 inline ::common::comm_req* comm_request::release_head() {
   // @@protoc_insertion_point(field_release:common.comm_request.head)
-  _has_bits_[0] &= ~0x00000002u;
+  
   ::common::comm_req* temp = head_;
   head_ = nullptr;
   return temp;
 }
 inline ::common::comm_req* comm_request::mutable_head() {
-  _has_bits_[0] |= 0x00000002u;
+  
   if (head_ == nullptr) {
     auto* p = CreateMaybeMessage<::common::comm_req>(GetArenaNoVirtual());
     head_ = p;
@@ -868,67 +808,60 @@ inline void comm_request::set_allocated_head(::common::comm_req* head) {
       head = ::PROTOBUF_NAMESPACE_ID::internal::GetOwnedMessage(
           message_arena, head, submessage_arena);
     }
-    _has_bits_[0] |= 0x00000002u;
+    
   } else {
-    _has_bits_[0] &= ~0x00000002u;
+    
   }
   head_ = head;
   // @@protoc_insertion_point(field_set_allocated:common.comm_request.head)
 }
 
-// optional string body = 2;
-inline bool comm_request::has_body() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
+// string body = 2;
 inline void comm_request::clear_body() {
   body_.ClearToEmptyNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-  _has_bits_[0] &= ~0x00000001u;
 }
 inline const std::string& comm_request::body() const {
   // @@protoc_insertion_point(field_get:common.comm_request.body)
   return body_.GetNoArena();
 }
 inline void comm_request::set_body(const std::string& value) {
-  _has_bits_[0] |= 0x00000001u;
+  
   body_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:common.comm_request.body)
 }
 inline void comm_request::set_body(std::string&& value) {
-  _has_bits_[0] |= 0x00000001u;
+  
   body_.SetNoArena(
     &::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:common.comm_request.body)
 }
 inline void comm_request::set_body(const char* value) {
   GOOGLE_DCHECK(value != nullptr);
-  _has_bits_[0] |= 0x00000001u;
+  
   body_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:common.comm_request.body)
 }
 inline void comm_request::set_body(const char* value, size_t size) {
-  _has_bits_[0] |= 0x00000001u;
+  
   body_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:common.comm_request.body)
 }
 inline std::string* comm_request::mutable_body() {
-  _has_bits_[0] |= 0x00000001u;
+  
   // @@protoc_insertion_point(field_mutable:common.comm_request.body)
   return body_.MutableNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 }
 inline std::string* comm_request::release_body() {
   // @@protoc_insertion_point(field_release:common.comm_request.body)
-  if (!has_body()) {
-    return nullptr;
-  }
-  _has_bits_[0] &= ~0x00000001u;
-  return body_.ReleaseNonDefaultNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
+  
+  return body_.ReleaseNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 }
 inline void comm_request::set_allocated_body(std::string* body) {
   if (body != nullptr) {
-    _has_bits_[0] |= 0x00000001u;
+    
   } else {
-    _has_bits_[0] &= ~0x00000001u;
+    
   }
   body_.SetAllocatedNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), body);
   // @@protoc_insertion_point(field_set_allocated:common.comm_request.body)
@@ -938,13 +871,15 @@ inline void comm_request::set_allocated_body(std::string* body) {
 
 // comm_response
 
-// optional .common.comm_resp head = 1;
+// .common.comm_resp head = 1;
 inline bool comm_response::has_head() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return this != internal_default_instance() && head_ != nullptr;
 }
 inline void comm_response::clear_head() {
-  if (head_ != nullptr) head_->Clear();
-  _has_bits_[0] &= ~0x00000002u;
+  if (GetArenaNoVirtual() == nullptr && head_ != nullptr) {
+    delete head_;
+  }
+  head_ = nullptr;
 }
 inline const ::common::comm_resp& comm_response::head() const {
   const ::common::comm_resp* p = head_;
@@ -954,13 +889,13 @@ inline const ::common::comm_resp& comm_response::head() const {
 }
 inline ::common::comm_resp* comm_response::release_head() {
   // @@protoc_insertion_point(field_release:common.comm_response.head)
-  _has_bits_[0] &= ~0x00000002u;
+  
   ::common::comm_resp* temp = head_;
   head_ = nullptr;
   return temp;
 }
 inline ::common::comm_resp* comm_response::mutable_head() {
-  _has_bits_[0] |= 0x00000002u;
+  
   if (head_ == nullptr) {
     auto* p = CreateMaybeMessage<::common::comm_resp>(GetArenaNoVirtual());
     head_ = p;
@@ -979,67 +914,60 @@ inline void comm_response::set_allocated_head(::common::comm_resp* head) {
       head = ::PROTOBUF_NAMESPACE_ID::internal::GetOwnedMessage(
           message_arena, head, submessage_arena);
     }
-    _has_bits_[0] |= 0x00000002u;
+    
   } else {
-    _has_bits_[0] &= ~0x00000002u;
+    
   }
   head_ = head;
   // @@protoc_insertion_point(field_set_allocated:common.comm_response.head)
 }
 
-// optional string body = 2;
-inline bool comm_response::has_body() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
+// string body = 2;
 inline void comm_response::clear_body() {
   body_.ClearToEmptyNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-  _has_bits_[0] &= ~0x00000001u;
 }
 inline const std::string& comm_response::body() const {
   // @@protoc_insertion_point(field_get:common.comm_response.body)
   return body_.GetNoArena();
 }
 inline void comm_response::set_body(const std::string& value) {
-  _has_bits_[0] |= 0x00000001u;
+  
   body_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:common.comm_response.body)
 }
 inline void comm_response::set_body(std::string&& value) {
-  _has_bits_[0] |= 0x00000001u;
+  
   body_.SetNoArena(
     &::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:common.comm_response.body)
 }
 inline void comm_response::set_body(const char* value) {
   GOOGLE_DCHECK(value != nullptr);
-  _has_bits_[0] |= 0x00000001u;
+  
   body_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:common.comm_response.body)
 }
 inline void comm_response::set_body(const char* value, size_t size) {
-  _has_bits_[0] |= 0x00000001u;
+  
   body_.SetNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:common.comm_response.body)
 }
 inline std::string* comm_response::mutable_body() {
-  _has_bits_[0] |= 0x00000001u;
+  
   // @@protoc_insertion_point(field_mutable:common.comm_response.body)
   return body_.MutableNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 }
 inline std::string* comm_response::release_body() {
   // @@protoc_insertion_point(field_release:common.comm_response.body)
-  if (!has_body()) {
-    return nullptr;
-  }
-  _has_bits_[0] &= ~0x00000001u;
-  return body_.ReleaseNonDefaultNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
+  
+  return body_.ReleaseNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 }
 inline void comm_response::set_allocated_body(std::string* body) {
   if (body != nullptr) {
-    _has_bits_[0] |= 0x00000001u;
+    
   } else {
-    _has_bits_[0] &= ~0x00000001u;
+    
   }
   body_.SetAllocatedNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), body);
   // @@protoc_insertion_point(field_set_allocated:common.comm_response.body)

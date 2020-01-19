@@ -16,10 +16,11 @@
 #include "comm_basic.pb.h"
 
 #define PORT 			8888
-#define IP 				"172.18.185.251"
+#define IP 				"127.0.0.1"
 #define CLRF			"\r\n"
 
 typedef class buffer    buffer_t;
+using namespace common;
 
 int main(int argc, char const *argv[])
 {
@@ -37,16 +38,19 @@ int main(int argc, char const *argv[])
 	}
 
 	for(int i = 0; i < 1; i++)
-	// while(1)
 	{
 		int err;
 		string str;
 
-		common::comm_request req;
+		comm_request req;
 		req.mutable_head()->set_ver(1);
 		req.mutable_head()->set_cmd(1);
 		req.mutable_head()->set_sub_cmd(1);
-		req.set_body("hello world");
+
+		char buf[1024] = {0};
+		scanf("%s", buf);
+
+		req.set_body(buf);
 		req.SerializeToString(&str);
 
 		buffer_t query_buf;
@@ -54,9 +58,7 @@ int main(int argc, char const *argv[])
 		query_buf.append_string(CLRF);
 		// query_buf.append_string("GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n");
 		ret = query_buf.write_buf(fd, err);
-
-		// sleep(3);
-
+		
 		buffer_t resp_buf;
 		if((ret = resp_buf.read_buf(fd, err)) > 0)
 		{
@@ -75,7 +77,7 @@ int main(int argc, char const *argv[])
 			resp_buf.read_len(strlen(CLRF));
 
 			printf("---------- read ----------\n");
-			printf("[%s]\n", resp.ShortDebugString().c_str());
+			printf("%s\n", resp.ShortDebugString().c_str());
 		}
 		else if(0 == ret)
 		{
@@ -83,7 +85,7 @@ int main(int argc, char const *argv[])
 		}
 		else /* -1 == ret */
 		{
-			printf("0 == ret\n");
+			printf("-1 == ret\n");
 		}
 	}
 
