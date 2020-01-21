@@ -25,43 +25,30 @@ using namespace common;
 
 typedef class buffer    buffer_t;
 void* client_handler(void* arg);
+uint64_t get_curr_msec();
 
-static uint64_t get_curr_msec()
+
+void test_conn_timeout()
 {
-	uint64_t msec;
-	struct timeval tv;
-
-	int ret = gettimeofday(&tv, 0);
-	if(0 != ret)
+	for(int i = 0; i < 1000; i++)
 	{
-		return -1;
+		int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		struct sockaddr_in addr;
+	   	addr.sin_family 		= AF_INET;
+		addr.sin_port 			= htons(PORT);
+		addr.sin_addr.s_addr   	= inet_addr(IP);
+
+		int ret = connect(fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in));
+		if(0 != ret)
+		{
+			printf("connect failed ret[%d]\n", ret);
+			_exit(ret);
+		}
 	}
-
-    msec = tv.tv_sec * 1000 + tv.tv_usec / 1000;
-
-	return msec;
 }
 
-int main(int argc, char const *argv[])
+void test_concurrence(char const *argv[])
 {
-	/* 检测连接后, 定时踢掉连接 */
-	// for(int i = 0; i < 1000; i++)
-	// {
-	// 	int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	// 	struct sockaddr_in addr;
-	//    	addr.sin_family 		= AF_INET;
-	// 	addr.sin_port 			= htons(PORT);
-	// 	addr.sin_addr.s_addr   	= inet_addr(IP);
-
-	// 	int ret = connect(fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in));
-	// 	if(0 != ret)
-	// 	{
-	// 		printf("connect failed ret[%d]\n", ret);
-	// 		_exit(ret);
-	// 	}
-	// }
-	// return 0;
-
 	uint64_t total = 0;
 
 	uint64_t th = 5;
@@ -90,8 +77,6 @@ int main(int argc, char const *argv[])
 	}
 
 	printf("take %lu msec, done with %lu requests\n", total, th*num);
-
-	return 0;
 }
 
 void* client_handler(void* arg)
@@ -163,4 +148,33 @@ void* client_handler(void* arg)
 	*retval = get_curr_msec() - begin;
 
 	return (void *)retval;
+}
+
+
+int main(int argc, char const *argv[])
+{
+	/* 检测连接后, 定时踢掉连接 */
+	test_conn_timeout();
+
+	/* 测试多线程并发请求服务的性能 */
+	test_concurrence(argv);
+
+	return 0;
+}
+
+
+uint64_t get_curr_msec()
+{
+	uint64_t msec;
+	struct timeval tv;
+
+	int ret = gettimeofday(&tv, 0);
+	if(0 != ret)
+	{
+		return -1;
+	}
+
+    msec = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+
+	return msec;
 }
