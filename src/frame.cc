@@ -405,7 +405,6 @@ int accept_handler(connection_t* lc)
 			continue;
 		}
 		conn->fd		= fd;
-		// conn->timer   = 0;
 		conn->active	= 0;
 		conn->accept	= 0;
 		conn->ready		= 0;
@@ -484,8 +483,6 @@ int parse_protocol_handler(connection_t* c)
 			return kDECODER_AGAIN;
 		}
 	}
-
-	printf("proto connection id:%d\n", c->id);
 
 	/* 解析出完整的请求 */
 	string str(in_buffer.read_begin(), ret);
@@ -752,11 +749,11 @@ static int work_process_cycle(cycle_t* cycle)
 	int cnt = 0;
 	int64_t time_out = -1;
 	
-	timer_queue_t& timer_queue             = cycle->timer_queue;
-	io_task_queue_t& io_task_queue         = cycle->io_task_queue;
-	accept_task_queue_t& accept_task_queue = cycle->accept_task_queue;
-	epoll_event_vec_t& ee_vec              = cycle->ee_vec;
-	client_free_list_t& conn_free 		   = cycle->conn_free;
+	timer_queue_t& timer_queue				= cycle->timer_queue;
+	io_task_queue_t& io_task_queue			= cycle->io_task_queue;
+	accept_task_queue_t& accept_task_queue	= cycle->accept_task_queue;
+	epoll_event_vec_t& ee_vec				= cycle->ee_vec;
+	client_free_list_t& conn_free			= cycle->conn_free;
 
 
 	pid_t id = gettid();
@@ -818,15 +815,14 @@ static int work_process_cycle(cycle_t* cycle)
 
 		for (int i = 0; i < cnt; ++i)
 		{
-			struct epoll_event* ee 	= &ee_vec[i];
-			uint events 		    = ee->events;
+			struct epoll_event* ee	= &ee_vec[i];
+			uint events				= ee->events;
 			connection_t* c 		= (connection_t *)ee->data.ptr;
-			int fd 					= c->fd;
+			int fd					= c->fd;
 
 			if(events & EPOLLRDHUP)
 			{
 				free_connection(c);
-				
 				continue;
 			}
 
