@@ -24,6 +24,7 @@ using namespace common;
 #define CLRF			"\r\n"
 
 typedef class buffer    buffer_t;
+void* client_handler(void* arg);
 
 static uint64_t get_curr_msec()
 {
@@ -61,14 +62,44 @@ int main(int argc, char const *argv[])
 	// }
 	// return 0;
 
-	uint64_t num = 1000000;
-	if(argv[1] != nullptr)
+	uint64_t total = 0;
+
+	uint64_t th = 5;
+	if(argv[1] != NULL)
 	{
-		num = stoull(argv[1]);
+		th = stoull(argv[1]);
 	}
+
+	uint64_t num = 5;
+	if(argv[2] != NULL)
+	{
+		num = stoull(argv[2]);
+	}
+
+	pthread_t ths[th];
+	for(int i = 0; i < th; i++)
+	{
+		pthread_create(&ths[i], NULL, client_handler, (void *)&num);
+	}
+	for(int i = 0; i < th; i++)
+	{
+		void* retval;
+		pthread_join(ths[i], &retval);
+		total += *(static_cast<uint64_t *>(retval));
+		delete (uint64_t *)retval;
+	}
+
+	printf("take %lu msec, done with %lu requests\n", total, th*num);
+
+	return 0;
+}
+
+void* client_handler(void* arg)
+{
 	uint64_t begin = get_curr_msec();
 
-	for(int i = 0; i < 1000000; i++)
+	int* num = static_cast<int *>(arg);
+	for(int i = 0; i < *num; i++)
 	{
 		int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		struct sockaddr_in addr;
@@ -90,8 +121,6 @@ int main(int argc, char const *argv[])
 		req.mutable_head()->set_ver(1);
 		req.mutable_head()->set_cmd(1);
 		req.mutable_head()->set_sub_cmd(1);
-		// char buf[64] = {0};
-		// scanf("%s", buf);
 		string msg = "hello " + to_string(i);
 
 		req.set_body(msg);
@@ -108,7 +137,7 @@ int main(int argc, char const *argv[])
 			char* eof = resp_buf.find_eof(CLRF);
 			if(!eof)
 			{
-				return -1;
+				exit(-1);
 			}
 			
 			string str(resp_buf.read_begin(), ret);
@@ -129,9 +158,9 @@ int main(int argc, char const *argv[])
 		close(fd);
 	}
 
-	uint64_t delta = get_curr_msec() - begin;
-	
-	printf("take %lu msec, done with %lu requests per msec\n", delta, num/delta);
+	uint64_t* retval = new uint64_t;
 
-	return 0;
+	*retval = get_curr_msec() - begin;
+
+	return (void *)retval;
 }
