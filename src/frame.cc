@@ -148,6 +148,7 @@ typedef struct response_s
 /* 客户端链接 */
 typedef struct connection_s
 {
+	int id;
 	int fd;					/* 套接字 */
 	int mask;				/* 事件类型掩码 */
 	
@@ -185,8 +186,9 @@ typedef struct cycle_s
 	io_task_queue_t 		io_task_queue;		/* epoll 激活事件: IO 网络读写事件任务队列 */
 	accept_task_queue_t 	accept_task_queue;	/* epoll 激活事件: accept 任务队列 */
 	epoll_event_vec_t       ee_vec;				/* 存储所有 epoll 注册事件 */
-	sig_atomic_t 			stop:1;				/* 是否停止 */
 } cycle_t;
+
+sig_atomic_t stop;
 
 typedef struct server
 {
@@ -216,7 +218,7 @@ int set_fd_noblock(int fd)
 	int ret = fcntl(fd, F_SETFL, flags);
 	if(0 != ret)
 	{
-		info_log("set fd noblock failed, errno msg:[%s]\n", strerror(errno));
+		printf("set fd noblock failed, errno msg:[%s]\n", strerror(errno));
 		return -1;
 	}
 
@@ -231,7 +233,7 @@ int set_fd_cloexec(int fd)
 	int ret = fcntl(fd, F_SETFD, flags);
 	if(0 != ret)
 	{
-		info_log("set fd cloexec failed, errno msg:[%s]\n", strerror(errno));
+		printf("set fd cloexec failed, errno msg:[%s]\n", strerror(errno));
 		return -1;
 	}
 
@@ -247,7 +249,7 @@ int set_fd_reuseaddr(int fd)
 
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const void *)&yes, sizeof(yes)) == -1)
     {
-    	info_log("set reuseaddr failed, errno msg:[%s]\n", strerror(errno));
+    	printf("set reuseaddr failed, errno msg:[%s]\n", strerror(errno));
         return -1;
     }
 
@@ -261,7 +263,7 @@ int set_fd_reuseport(int fd)
 
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, (const void *)&yes, sizeof(yes)) == -1)
     {
-    	info_log("set reuseport failed, errno msg:[%s]\n", strerror(errno));
+    	printf("set reuseport failed, errno msg:[%s]\n", strerror(errno));
         return -1;
     }
 
@@ -273,7 +275,7 @@ int set_fd_noblock_and_cloexec(int fd)
 	if(set_fd_noblock(fd) != 0 ||
 		set_fd_cloexec(fd) != 0)
 	{
-		info_log("set fd noblock & cloexec failed, errno msg:[%s]\n", strerror(errno));
+		printf("set fd noblock & cloexec failed, errno msg:[%s]\n", strerror(errno));
 		return -1;
 	}
 
@@ -285,7 +287,7 @@ int write_handler(connection_t* c);
 
 int empty_handler(connection_t* c)
 {
-	info_log("fd:%d empty_handler\n", c->fd);
+	printf("fd:%d empty_handler\n", c->fd);
 	return 0;
 }
 
@@ -304,7 +306,7 @@ int epoll_add_event(connection_t* c, int ep_fd, int sock_fd, int mask)
 	ret = epoll_ctl(ep_fd, op, sock_fd, &ee);
 	if(0 != ret) 
 	{
-		info_log("[%s:%d] | errno msg:%s \n", 
+		printf("[%s:%d] | errno msg:%s \n", 
 			__func__, __LINE__, strerror(errno));
 		return -1;
 	}
@@ -327,7 +329,7 @@ int epoll_delete_event(connection_t* c, int ep_fd, int sock_fd, int del_mask)
 	ret = epoll_ctl(ep_fd, op, sock_fd, &ee);
 	if(0 != ret)
 	{
-		info_log("method:[%s] line:[%d] | errno msg:%s \n", 
+		printf("method:[%s] line:[%d] | errno msg:%s \n", 
 			__func__, __LINE__, strerror(errno));
 		return -1;
 	}
@@ -350,7 +352,7 @@ int epoll_add_listen(connection_t* c, int ep_fd, int listen_fd)
 	ret = epoll_ctl(ep_fd, EPOLL_CTL_ADD, listen_fd, &ee);
 	if(0 != ret)
 	{
-		info_log("method:[%s] line:[%d] | errno msg:%s \n", 
+		printf("method:[%s] line:[%d] | errno msg:%s \n", 
 			__func__, __LINE__, strerror(errno));
 		return -1;
 	}
@@ -368,7 +370,7 @@ int epoll_del_listen(connection_t* c, int ep_fd, int listen_fd)
 	ret = epoll_ctl(ep_fd, EPOLL_CTL_DEL, listen_fd, &ee);
 	if(0 != ret)
 	{
-		info_log("method:[%s] line:[%d] | errno msg:%s \n", 
+		printf("method:[%s] line:[%d] | errno msg:%s \n", 
 			__func__, __LINE__, strerror(errno));
 		return -1;
 	}
@@ -431,7 +433,7 @@ int accept_handler(connection_t* lc)
 		ret = set_fd_reuseaddr(fd);
 		if(0 != ret)
 		{
-			info_log("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
+			printf("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
 			return -1;
 		}
 
@@ -483,13 +485,13 @@ int parse_protocol_handler(connection_t* c)
 		}
 	}
 
-	/* 解析出完整的请求 */
-	char buf[ret+1];
-	buf[ret] = '\0';
-	in_buffer.get_string(ret, buf);
-	in_buffer.read_len(strlen(CLRF));
+	printf("proto connection id:%d\n", c->id);
 
-	c->req.ParseFromString(buf);
+	/* 解析出完整的请求 */
+	string str(in_buffer.read_begin(), ret);
+	c->req.ParseFromString(str);
+	c->req.PrintDebugString();
+	in_buffer.read_len(ret + strlen(CLRF));
 
 	return 0;
 }
@@ -504,8 +506,6 @@ int client_handler(connection_t* c)
 	// out_buf.append_string(str);
 	
 	/* 客户端 test */
-	printf("---------- read ----------\n");
-	c->req.PrintDebugString();
 	
 	c->resp.mutable_head()->set_err_code(1);
 	c->resp.mutable_head()->set_err_msg("ok");
@@ -514,7 +514,7 @@ int client_handler(connection_t* c)
 	c->resp.set_body("=== " + tmp + " ===");
 	string str;
 	c->resp.SerializeToString(&str);
-	out_buf.append_string(str.c_str());
+	out_buf.append_string(str);
 	out_buf.append_string(CLRF);
 
 	return 0;
@@ -553,7 +553,7 @@ int read_handler(connection_t* c)
 		}
 		
 		/* kBUFFER_ERROR 其他错误直接释放链接 */
-		info_log("buf read error, ret:[%d] errno msg:[%s]\n", ret, strerror(errno));
+		printf("buf read error, ret:[%d] errno msg:[%s]\n", ret, strerror(errno));
 		
 		ret = -1;
 		goto error;	
@@ -597,6 +597,8 @@ int read_handler(connection_t* c)
 		goto error;
 	}
 
+	return 0;
+
 error:
 	free_connection(c);
 
@@ -605,7 +607,7 @@ error:
 
 int write_empty_handler(connection_t* c)
 {
-	info_log("%s\n", "write_empty_handler");
+	printf("%s\n", "write_empty_handler");
 	return 0;
 }
 
@@ -678,10 +680,10 @@ void del_event_timer(cycle_t* cycle, event_t* ev)
 /* 一个稍微复杂的过程 */
 int free_connection(connection_t* c)
 {
-	printf("free_connection fd:%d\n", c->fd);
-	cycle_t* cycle = c->cycle;
-	int efd 	     = cycle->efd;
-	int fd           = c->fd;
+	printf("free_connection id:%d\n", c->id);
+	cycle_t* cycle	= c->cycle;
+	int efd			= cycle->efd;
+	int fd			= c->fd;
 
 	if(-1 == fd) return 0;
 
@@ -700,23 +702,27 @@ int free_connection(connection_t* c)
 	/* 1. 删除 读/写 事件定时器 */
 	if(c->rev.timer_set) 
 	{
+		printf("%s\n", "rev delete timer");
 		del_event_timer(cycle, &(c->rev));
 	}
 
 	if(c->wev.timer_set)
 	{
+		printf("%s\n", "wev delete timer");
 		del_event_timer(cycle, &(c->wev));
 	}
 
 	/* 2. 删除 读/写 IO事件 post 队列 */
 	if(c->rev.posted)
 	{
+		printf("%s\n", "rev delete posted");
 		c->rev.posted = 0;
 		cycle->io_task_queue.erase(c->rev.pos);
 	}
 
 	if(c->wev.posted)
 	{
+		printf("%s\n", "wev delete posted");
 		c->wev.posted = 0;
 		cycle->io_task_queue.erase(c->wev.pos);
 	}
@@ -725,13 +731,18 @@ int free_connection(connection_t* c)
 	close(fd);
 	c->fd = -1;
 
+	c->in_buf.reset();
+	c->out_buf.reset();
+
 	return 0;
 }
 
 void conn_time_out(void* arg)
 {
 	event_t* ev = static_cast<event_t *>(arg);
+	
 	connection_t* c = static_cast<connection_t *>(ev->arg);
+
 	if(!c->ready) free_connection(c);
 }
 
@@ -745,9 +756,11 @@ static int work_process_cycle(cycle_t* cycle)
 	io_task_queue_t& io_task_queue         = cycle->io_task_queue;
 	accept_task_queue_t& accept_task_queue = cycle->accept_task_queue;
 	epoll_event_vec_t& ee_vec              = cycle->ee_vec;
+	client_free_list_t& conn_free 		   = cycle->conn_free;
+
 
 	pid_t id = gettid();
-	// info_log("work process id:%d\n", id);
+	// printf("work process id:%d\n", id);
 	/* todo 子进程搞事情 */
 	int efd = epoll_create1(0);
 
@@ -768,7 +781,7 @@ static int work_process_cycle(cycle_t* cycle)
 	ret = epoll_add_listen(conn, efd, conn->fd);
 	if(0 != ret)
 	{
-		info_log("listen fd epoll_add failed\n");
+		printf("listen fd epoll_add failed\n");
 		return -1;
 	}
 
@@ -777,9 +790,12 @@ static int work_process_cycle(cycle_t* cycle)
 	while(1)
 	{
 		/* 进程退出 */
-		if(cycle->stop)
+		if(stop)
 		{
-			//todo
+			// for_each(conn_free.begin(), conn_free.end(), [](connection_t* c){
+			// 	delete c;
+			// });
+			exit(0);
 		}
 
 		/* -------------- 定时器 解析 -------------- */
@@ -825,12 +841,14 @@ static int work_process_cycle(cycle_t* cycle)
 				{
 					c->rev.posted = 1;
 					c->rev.pos = accept_task_queue.insert(accept_task_queue.end(), &(c->rev));
+					printf("%s\n", "accept insert posted");
 				}
 				else
 				{
 					//加入读事件队列
 					c->rev.posted = 1;
 					c->rev.pos = io_task_queue.insert(io_task_queue.end(), &(c->rev));
+					printf("%s\n", "rev insert posted");
 				}
 			}
 			
@@ -839,12 +857,14 @@ static int work_process_cycle(cycle_t* cycle)
 				/* 加入写事件队列 */
 				c->wev.posted = 1;
 				c->wev.pos = io_task_queue.insert(io_task_queue.end(), &(c->wev));
+				printf("%s\n", "wev insert posted");
 			}
 		}
 
 		/* -------------- accept 事件 -------------- */
 		while(!accept_task_queue.empty())
 		{
+			printf("%s\n", "accept done");
 			event_t* ev = accept_task_queue.front();
 			accept_task_queue.pop_front();
 			ev->posted = 0;
@@ -854,17 +874,24 @@ static int work_process_cycle(cycle_t* cycle)
 		/* -------------- 定时器事件 -------------- */
 		while((timer = timer_queue.lower_bound(0)) != timer_queue.end() && timer->first <= cycle->now) {
 
-			timer_queue.erase(timer);
-
-			for_each(timer->second.begin(), timer->second.end(), [](mtimer_t* t)
+			set<mtimer_t *>::iterator it = timer->second.begin();
+			while(it != timer->second.end())
 			{
-				((event_handler_t)t->handler)((connection_t *)t->arg);
-			});
+				printf("%s\n", "timer done");
+				set<mtimer_t *>::iterator tt = it++;
+				event_t* ev = static_cast<event_t *>((*tt)->arg);
+				ev->timer_set = 0;
+				((event_handler_t)(*tt)->handler)((connection_t *)(*tt)->arg);
+			}
+			timer->second.clear();
+
+			timer_queue.erase(timer);
 		}
 		
 		/* -------------- 网络 I/O 的读写事件 -------------- */
 		while(!io_task_queue.empty())
 		{
+			printf("%s\n", "io done");
 			event_t* ev = io_task_queue.front();
 			io_task_queue.pop_front();
 			ev->posted = 0;
@@ -898,23 +925,52 @@ static int daemonize()
 static int master_process_cycle(cycle_t* cycle)
 {
 	pid_t id = gettid();
-	info_log("master process id:%d\n", id);
+	printf("master process id:%d\n", id);
 	close(cycle->lfd);
-	info_log("master close lfd\n");
+	printf("master close lfd\n");
 	/* todo master搞事情 */
 	while(1)
 	{
 		sleep(3);
-		// info_log("master_process_cycle %d\n", id);
+		// printf("master_process_cycle %d\n", id);
 	}
 	
 	return 0;
 }
 
+static void sig_shutdown_handler(int signo, siginfo_t *siginfo, void *ucontext)
+{
+    char *msg;
+
+    switch (signo) {
+    case SIGINT:
+        printf("%s\n", "received SIGINT shutdown...");
+        break;
+    case SIGTERM:
+        printf("%s\n", "received SIGTERM shutdown...");
+        break;
+    default:
+        printf("%s\n", "received shutdown signal shutdown...");
+    };
+
+    stop = 1;
+}
+
 /* 安装信号 handler */
 static void init_signal()
 {
-	
+	signal(SIGHUP, SIG_IGN);
+	signal(SIGPIPE, SIG_IGN);
+
+    struct sigaction act;
+
+    /* When the SA_SIGINFO flag is set in sa_flags then sa_sigaction is used.
+     * Otherwise, sa_handler is used. */
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = SA_SIGINFO;
+	act.sa_sigaction = sig_shutdown_handler;
+	sigaction(SIGTERM, &act, NULL);
+	sigaction(SIGINT, &act, NULL);
 }
 
 static void init_log()
@@ -930,32 +986,29 @@ static int init_ser(cycle_t* cycle)
 
 	init_log();
 	init_signal();
-	
+
 	client_free_list_t& conn_free = cycle->conn_free;
-	// for_each(conn_free.begin(), conn_free.end(), [& conn_free]()
-	// {
-	// 	conn_free.push_back(new connection_t);
-	// });
 	for(int i = 0; i < 1024; i++)
 	{
-		conn_free.push_back(new connection_t);
+		connection_t* c = new connection_t;
+		c->id = i;
+		conn_free.push_back(c);
 	}
 
 	cycle->ee_vec.resize(EPOLL_SIZE); /* 调节size */
 	cycle->lfd = socket(AF_INET, SOCK_STREAM, 0);
-	cycle->stop = 0;
 
 	ret = set_fd_reuseaddr(cycle->lfd);
 	if(0 != ret)
 	{
-		info_log("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
+		printf("listen fd set reuseaddr failed, errno msg:%s\n", strerror(errno));
 		return -1;
 	}
 
     ret = set_fd_noblock(cycle->lfd);
 	if(0 != ret)
 	{
-		info_log("set lfd[%d] failed\n", cycle->lfd);
+		printf("set lfd[%d] failed\n", cycle->lfd);
 		exit(ret);
 	}
 
@@ -970,16 +1023,16 @@ static int init_ser(cycle_t* cycle)
 	ret = bind(cycle->lfd, (struct sockaddr *)&addr, sizeof(struct sockaddr));
 	if(0 != ret)
 	{
-		info_log("process[%d] bind lfd[%d] failed, errno msg:[%s]\n", id, cycle->lfd, strerror(errno));
+		printf("process[%d] bind lfd[%d] failed, errno msg:[%s]\n", id, cycle->lfd, strerror(errno));
 		exit(ret);
 	}
 
-	info_log("process[%d] bind lfd[%d] sucess\n", id, cycle->lfd);
+	// printf("process[%d] bind lfd[%d] sucess\n", id, cycle->lfd);
 
 	ret = listen(cycle->lfd, LISTEN_SIZE);
 	if(0 != ret)
 	{
-		info_log("process[%d] listen lfd[%d] failed\n", id, cycle->lfd);
+		printf("process[%d] listen lfd[%d] failed\n", id, cycle->lfd);
 		exit(ret);
 	}
 
@@ -993,7 +1046,7 @@ int main(int argc, char* argv[])
 	RETURN_CHECK(init_ser(&cycle));
 
 	int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
-	// info_log("cpu_num=%d\n", cpu_num);
+	// printf("cpu_num=%d\n", cpu_num);
 
 	/* 为方便调试work进程，暂时先把work进程逻辑放在main流程上 */
 
@@ -1003,7 +1056,7 @@ int main(int argc, char* argv[])
 	// 	switch(pid)
 	// 	{
 	// 		case -1:
-	// 			info_log("fork error!\n");
+	// 			printf("fork error!\n");
 	// 			break;
 	// 		case 0:
 	// 			/* 子进程 */

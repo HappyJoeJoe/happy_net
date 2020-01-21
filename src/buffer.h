@@ -24,6 +24,12 @@ public:
 		write_idx_(reserve_size), 
 		buf_(reserve_size + init_size) {}
 
+	void reset()
+	{
+		read_idx_ = reserve_size;
+		write_idx_ = reserve_size;
+	}
+
 	template<typename T>
 	int peek(T& t) 
 	{

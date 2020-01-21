@@ -2,4 +2,6 @@
 
 killall ser
 
-valgrind --tool=memcheck --leak-check=full --show-reachable=yes -q ./ser 
+valgrind --tool=memcheck --leak-check=full -q ./ser 
+
+# valgrind --tool=massif ./ser

@@ -37,56 +37,45 @@ int main(int argc, char const *argv[])
 		_exit(ret);
 	}
 
-	for(int i = 0; i < 1; i++)
+	int err;
+	string str;
+
+	comm_request req;
+	req.mutable_head()->set_ver(1);
+	req.mutable_head()->set_cmd(1);
+	req.mutable_head()->set_sub_cmd(1);
+	char buf[64] = {0};
+	scanf("%s", buf);
+	req.set_body(buf);
+	req.SerializeToString(&str);
+
+	buffer_t query_buf;
+	query_buf.append_string(str);
+	query_buf.append_string(CLRF);
+	ret = query_buf.write_buf(fd, err);
+	
+	buffer_t resp_buf;
+	if((ret = resp_buf.read_buf(fd, err)) > 0)
 	{
-		int err;
-		string str;
-
-		comm_request req;
-		req.mutable_head()->set_ver(1);
-		req.mutable_head()->set_cmd(1);
-		req.mutable_head()->set_sub_cmd(1);
-
-		char buf[1024] = {0};
-		scanf("%s", buf);
-
-		req.set_body(buf);
-		req.SerializeToString(&str);
-
-		buffer_t query_buf;
-		query_buf.append_string(str.c_str());
-		query_buf.append_string(CLRF);
-		// query_buf.append_string("GET / HTTP/1.0\r\nHost: localhost:8888\r\nUser-Agent: ApacheBench/2.3\r\nAccept: */*\r\n\r\n");
-		ret = query_buf.write_buf(fd, err);
+		char* eof = resp_buf.find_eof(CLRF);
+		if(!eof)
+		{
+			return -1;
+		}
 		
-		buffer_t resp_buf;
-		if((ret = resp_buf.read_buf(fd, err)) > 0)
-		{
-			char* eof = resp_buf.find_eof(CLRF);
-			if(!eof)
-			{
-				return -1;
-			}
-			
-			int len = eof - resp_buf.read_begin();
-			char buf[len+1];
-			buf[len] = '\0';
-			resp_buf.get_string(len, buf);
-			common::comm_response resp;
-			resp.ParseFromString(buf);
-			resp_buf.read_len(strlen(CLRF));
-
-			printf("---------- read ----------\n");
-			printf("%s\n", resp.ShortDebugString().c_str());
-		}
-		else if(0 == ret)
-		{
-			printf("0 == ret\n");
-		}
-		else /* -1 == ret */
-		{
-			printf("-1 == ret\n");
-		}
+		string str(resp_buf.read_begin(), ret);
+		common::comm_response resp;
+		resp.ParseFromString(str);
+		resp_buf.read_len(strlen(CLRF));
+		resp.PrintDebugString();
+	}
+	else if(0 == ret)
+	{
+		printf("0 == ret\n");
+	}
+	else /* -1 == ret */
+	{
+		printf("-1 == ret\n");
 	}
 
 	close(fd);
