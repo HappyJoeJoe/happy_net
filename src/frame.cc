@@ -677,7 +677,7 @@ void del_event_timer(cycle_t* cycle, event_t* ev)
 /* 一个稍微复杂的过程 */
 int free_connection(connection_t* c)
 {
-	printf("free_connection id:%d\n", c->id);
+	printf("free_connection id:%d  fd:%d\n", c->id, c->fd);
 	cycle_t* cycle	= c->cycle;
 	int efd			= cycle->efd;
 	int fd			= c->fd;
@@ -761,7 +761,6 @@ static int work_process_cycle(cycle_t* cycle)
 	/* todo 子进程搞事情 */
 	int efd = epoll_create1(0);
 
-	// cycle.lfd = lfd;
 	cycle->efd = efd;
 
 	connection_t* conn = new connection_t();
