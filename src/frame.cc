@@ -869,14 +869,14 @@ static int work_process_cycle(cycle_t* cycle)
 		/* -------------- 定时器事件 -------------- */
 		while((timer = timer_queue.lower_bound(0)) != timer_queue.end() && timer->first <= cycle->now) {
 
-			set<mtimer_t *>::iterator it = timer->second.begin();
-			while(it != timer->second.end())
+			set<mtimer_t *>::iterator next = timer->second.begin();
+			while(next != timer->second.end())
 			{
 				printf("%s\n", "timer done");
-				set<mtimer_t *>::iterator tt = it++;
-				event_t* ev = static_cast<event_t *>((*tt)->arg);
+				set<mtimer_t *>::iterator it = next++;
+				event_t* ev = static_cast<event_t *>((*it)->arg);
 				ev->timer_set = 0;
-				((event_handler_t)(*tt)->handler)((connection_t *)(*tt)->arg);
+				((event_handler_t)(*it)->handler)((connection_t *)(*it)->arg);
 			}
 			timer->second.clear();
 
