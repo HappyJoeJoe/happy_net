@@ -19,7 +19,7 @@
 #include <string.h>
 
 /* user defined header */
-#include "co_thread.h"
+#include "co_routinue.h"
 #include "buffer.h"
 #include "error.h"
 #include "global.h"
@@ -948,7 +948,7 @@ static int master_process_cycle(cycle_t* cycle)
 					break;
 				case 0:
 					/* 子进程 */
-					work_process_cycle(&cycle);
+					work_process_cycle(cycle);
 					return 0;
 				default:
 					break;
