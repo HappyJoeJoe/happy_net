@@ -24,10 +24,28 @@ int main(int argc, char const *argv[])
 
 	buffer b;
 	b.append<obj>(o);
+
+    cout << "reverse: " 
+         << b.peek_reserve() 
+         << " obj:" 
+         << sizeof(obj)
+         << endl;
+
 	b.append_string(str);
+
+    cout << "reverse: " 
+         << b.peek_reserve() 
+         << " len:"
+         << len
+         << endl;
 
 	obj tmp;
 	b.get<obj>(tmp);
+
+    cout << "reverse: " 
+         << b.peek_reserve() 
+         << endl;
+
 	cout << "age:"    << tmp.age    << " "
 	     << "str:"    << tmp.c      << " "
 	     << "height:" << tmp.height << " "
@@ -37,6 +55,10 @@ int main(int argc, char const *argv[])
     char buf[len+1];
     b.get_string(len, buf);
     cout << "buf:[" << buf << "]" << endl;
+
+    cout << "reverse: " 
+         << b.peek_reserve() 
+         << endl;
 
     cout << "------------------------------------" << endl;
 
@@ -50,6 +72,10 @@ int main(int argc, char const *argv[])
     bb.append<char>('g');
     bb.append<char>('h');
 
+    cout << "reverse: " 
+         << bb.peek_reserve() 
+         << endl;
+
     char c_a;
     char c_b;
     char c_c;
@@ -58,6 +84,10 @@ int main(int argc, char const *argv[])
     bb.get<char>(c_b);
     bb.get<char>(c_c);
     bb.get<char>(c_d);
+
+    cout << "reverse: " 
+         << bb.peek_reserve() 
+         << endl;
 
     cout << "a:[" << c_a << "] " 
          << "b:[" << c_b << "] " 
@@ -69,11 +99,20 @@ int main(int argc, char const *argv[])
     size_t len2 = strlen(str1);
     bb.append_string(str1);
 
+    cout << "reverse: " 
+         << bb.peek_reserve() 
+         << endl;
+
     //4 表示'e', 'f', 'g', 'h'四个字节
     char buf1[4 + len2 + 1];
+    buf1[4 + len2] = '\0';
     bb.get_string(4 + len2, buf1);
     cout << "buf1:[" << buf1 << "]" << endl;
+    cout << "buf1[" << 4 + len2 << "]:" << buf1[4 + len2] << endl;
 
+    cout << "reverse: " 
+         << bb.peek_reserve() 
+         << endl;
 
 	return 0;
 }

@@ -3,12 +3,12 @@
  *@文件名称: co_thread.h
  *@Date 2018-05-16 18:00:00
  *@Author jiabo.zhou
- *@Copyright（C）: 2014-2018 fancy Inc.   All rights reserved.
+ *@Copyright（C）: 2014-2020 fancy Inc.   All rights reserved.
  *注意：
 ***************************************/
 
-#ifndef __CO_THREAD_H__
-#define __CO_THREAD_H__
+#ifndef __CO_ROUTINUE_H__
+#define __CO_ROUTINUE_H__
 
 //linux header
 #include <ucontext.h>
@@ -23,6 +23,7 @@
 
 //c++ header
 #include <vector>
+#include <map>
 #include <memory>
 
 //user defined header
@@ -49,13 +50,14 @@ using namespace std;
 #define co_cur()				co_schedule::cur()
 
 
-class co_thread;
+class co_routinue;
 class co_schedule;
-typedef class co_thread 			co_thread_t;
+typedef class co_routinue 			co_routinue_t;
 typedef class co_schedule 			co_schedule_t;
-typedef vector<co_thread_t*> 		co_sche_stack_t;
-typedef vector<co_thread_t*> 		co_threads_t;
-typedef co_sche_stack_t::iterator 	sche_stack_ite;
+typedef vector<co_routinue_t*> 		co_sche_stack_t;
+typedef vector<co_routinue_t*> 		co_threads_t;
+typedef co_sche_stack_t::iterator 	sche_stack_iter;
+typedef map<int, co_schedule_t*>::iterator	g_co_routinue_per_thread_iter;
 typedef void (*co_func_t)(void*);
 
 enum co_thread_stat
@@ -66,11 +68,11 @@ enum co_thread_stat
 	SUSPEND
 };
 
-class co_thread
+class co_routinue
 {
 public:
-	explicit co_thread() {}
-	~co_thread() {}
+	explicit co_routinue() {}
+	~co_routinue() {}
 
 	inline void set_func(co_func_t f) { func = f; }
 
@@ -107,7 +109,7 @@ private:
 class co_schedule
 {
 public:
-	explicit co_schedule():running(-1), max_index(DEFAULT_THREAD_SIZE), tid(gettid()) {}
+	explicit co_schedule():running(-1), tid(gettid()) {}
 	~co_schedule() {}
 
 	static int create(co_func_t func, void* arg);
@@ -122,32 +124,16 @@ public:
 
 	static int cur();
 
-public:
-
+private:
 	int init_env();
 
-	inline co_sche_stack_t& get_sche_stack() { return sche_stack; }
-
-	inline co_threads_t& get_threads() { return threads; }
-
-	inline int get_running() { return running; }
-
-	inline void set_running(int r) { running = r; }
-
-	inline void set_max_index(int m) { max_index = m; }
-
-	inline int get_max_index() { return max_index; }
-
-	inline co_thread_t& get_thread_main() { return thread_main; }
-
 private:
-	static co_schedule_t* g_co_thread_arr_per_thread[102400];
+	static map<int, co_schedule_t*> g_co_routinue_per_thread;
 
-	co_thread_t 		thread_main;//main 执行流协程
+	co_routinue_t 		thread_main;//main 执行流协程
 	co_sche_stack_t		sche_stack;	//调度协程栈
 	co_threads_t		threads;	//协程管理队列
 	int 				running;	//sche_stack 专门使用，top 表示当前运行的协程
-	int 				max_index;
 	pid_t 				tid;
 };
 

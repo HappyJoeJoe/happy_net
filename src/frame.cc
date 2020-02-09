@@ -30,19 +30,19 @@
 using namespace std;
 using namespace common;
 
-#define OPEN_FD_LIMIT   10000       /* to configure */
-#define PORT 			8888        /* to configure */
-#define EPOLL_SIZE 		1024        /* to configure */
-#define LISTEN_SIZE 	256         /* to configure */
-#define TIME_OUT 		3           /* to configure */
+#define OPEN_FD_LIMIT   10000		/* to configure */
+#define PORT 			8888		/* to configure */
+#define EPOLL_SIZE 		1024		/* to configure */
+#define LISTEN_SIZE 	256			/* to configure */
+#define TIME_OUT 		3			/* to configure */
 #define STRING_EOF      '\0'
 #define CLRF            "\r\n"
 
 #define READ_EVENT 		(1 << 0)
 #define WRITE_EVENT 	(1 << 1)
 
-#define MASTER          (1 << 0) /* master 实例 */
-#define SLAVE           (1 << 1) /* slave  实例 */
+#define MASTER          (1 << 0)	/* master 实例 */
+#define SLAVE           (1 << 1)	/* slave  实例 */
 
 #define IPV4_MASK       (1 << 0)
 #define IPV6_MASK       (1 << 1)
@@ -63,8 +63,8 @@ typedef struct cycle_s			cycle_t;
 typedef list<event_t*>::iterator event_pos;
 typedef list<event_t*>			io_task_queue_t;
 typedef list<event_t*>			accept_task_queue_t;
-typedef list<connection_t*>		client_free_list_t; //智能指针
-typedef set<connection_t*>		client_set_t;    //智能指针
+typedef list<connection_t*>		client_free_list_t;	//智能指针
+typedef set<connection_t*>		client_set_t;		//智能指针
 typedef vector<struct  epoll_event>		epoll_event_vec_t;
 typedef map<uint64_t,  set<mtimer_t*>>	timer_queue_t;
 
@@ -188,7 +188,8 @@ typedef struct cycle_s
 	epoll_event_vec_t       ee_vec;				/* 存储所有 epoll 注册事件 */
 } cycle_t;
 
-sig_atomic_t stop;
+volatile sig_atomic_t stop;
+volatile sig_atomic_t child;
 
 typedef struct server
 {
@@ -202,13 +203,13 @@ typedef struct server
 	char*     bind_addr[16]; 	/* 端口绑定的本地IP列表 */
 	int*      bind_count;		/* 实际绑定本地IP列表数( <= 16) */
 	int       daemonize:1;		/* 是否后台模式 */
-	int       type;				/* bitwise, server类型，eg: master or slave */
+	int       type;				/* bitwise, server类型: master or slave */
 	int       unix_fd;			/* UNIX 域套接字 */
 	char*     unix_path;		/* 路径: /tmp/happy.sock */
 	int       cpu_num;			/* cpu核数 */
-} server;
+} server_t;
 
-server  ser;
+server_t  ser;
 
 int set_fd_noblock(int fd)
 {
@@ -788,9 +789,6 @@ static int work_process_cycle(cycle_t* cycle)
 		/* 进程退出 */
 		if(stop)
 		{
-			// for_each(conn_free.begin(), conn_free.end(), [](connection_t* c){
-			// 	delete c;
-			// });
 			exit(0);
 		}
 
@@ -923,49 +921,77 @@ static int master_process_cycle(cycle_t* cycle)
 	printf("master process id:%d\n", id);
 	close(cycle->lfd);
 	printf("master close lfd\n");
-	/* todo master搞事情 */
+
+	sigset_t set;
+	sigemptyset(&set);
+    sigaddset(&set, SIGCHLD);
+    sigaddset(&set, SIGALRM);
+    sigaddset(&set, SIGINT);
+
+    if (sigprocmask(SIG_BLOCK, &set, NULL) == -1) {
+    }
+
+    sigemptyset(&set);
+
 	while(1)
 	{
-		sleep(3);
-		// printf("master_process_cycle %d\n", id);
+		printf("master_process_cycle %d\n", id);
+		sigsuspend(&set);
+
+		if(child)
+		{
+			pid_t pid = fork();
+			switch(pid)
+			{
+				case -1:
+					printf("fork error!\n");
+					break;
+				case 0:
+					/* 子进程 */
+					work_process_cycle(&cycle);
+					return 0;
+				default:
+					break;
+			}
+		}
 	}
 	
 	return 0;
 }
 
-static void sig_shutdown_handler(int signo, siginfo_t *siginfo, void *ucontext)
+static void sig_handler(int signo, siginfo_t* siginfo, void* ucontext)
 {
     char *msg;
 
     switch (signo) {
     case SIGINT:
+    	stop = 1;
         printf("%s\n", "received SIGINT shutdown...");
         break;
     case SIGTERM:
+    	stop = 1;
         printf("%s\n", "received SIGTERM shutdown...");
         break;
+	case SIGCHLD:
+		child = 1;
+		printf("%s\n", "received SIGCHLD fork...");
     default:
         printf("%s\n", "received shutdown signal shutdown...");
     };
-
-    stop = 1;
 }
 
 /* 安装信号 handler */
 static void init_signal()
 {
-	signal(SIGHUP, SIG_IGN);
-	signal(SIGPIPE, SIG_IGN);
-
     struct sigaction act;
-
-    /* When the SA_SIGINFO flag is set in sa_flags then sa_sigaction is used.
-     * Otherwise, sa_handler is used. */
+    
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = SA_SIGINFO;
-	act.sa_sigaction = sig_shutdown_handler;
+	act.sa_sigaction = sig_handler;
+
 	sigaction(SIGTERM, &act, NULL);
 	sigaction(SIGINT, &act, NULL);
+	sigaction(SIGCHLD, &act, NULL);
 }
 
 static void init_log()
@@ -1041,34 +1067,33 @@ int main(int argc, char* argv[])
 	RETURN_CHECK(init_ser(&cycle));
 
 	int cpu_num = sysconf(_SC_NPROCESSORS_CONF);
-	// printf("cpu_num=%d\n", cpu_num);
+	printf("cpu_num=%d\n", cpu_num);
 
 	/* 为方便调试work进程，暂时先把work进程逻辑放在main流程上 */
-
-	// for (int i = 0; i < cpu_num; ++i)
-	// {
-	// 	pid_t pid = fork();
-	// 	switch(pid)
-	// 	{
-	// 		case -1:
-	// 			printf("fork error!\n");
-	// 			break;
-	// 		case 0:
-	// 			/* 子进程 */
-	// 			work_process_cycle(&cycle);
-	// 			return 0;
-	// 		default:
-	// 			break;
-	// 	}
-	// }
+	for (int i = 0; i < cpu_num; ++i)
+	{
+		pid_t pid = fork();
+		switch(pid)
+		{
+			case -1:
+				printf("fork error!\n");
+				break;
+			case 0:
+				/* 子进程 */
+				work_process_cycle(&cycle);
+				return 0;
+			default:
+				break;
+		}
+	}
 
 	/* 主进程 */
-	// master_process_cycle(&cycle);
+	master_process_cycle(&cycle);
 
 	/* 后台进程 */
 	// daemonize();
 	
-	work_process_cycle(&cycle);
+	// work_process_cycle(&cycle);
 	
 	return 0;
 }

@@ -22,12 +22,19 @@ public:
 	explicit buffer() : 
 		read_idx_(reserve_size), 
 		write_idx_(reserve_size), 
-		buf_(reserve_size + init_size) {}
+		buf_(reserve_size + init_size) 
+	{
+		uint64_t* pointer = (uint64_t *)&*buf_.begin();
+		*pointer = 0;
+	}
 
 	void reset()
 	{
 		read_idx_ = reserve_size;
 		write_idx_ = reserve_size;
+
+		uint64_t* pointer = (uint64_t *)&*buf_.begin();
+		*pointer = 0;
 	}
 
 	template<typename T>
@@ -74,7 +81,7 @@ public:
 			     read_begin() + len,
 			     (char *)&t);
 
-			read_idx_ += len;
+			add_read_idx(len);
 
 			return len;
 		}
@@ -94,7 +101,8 @@ public:
 			     read_begin() + len,
 			     ptr);
 
-			read_idx_ += len;
+			add_read_idx(len);
+
 			return len;
 		}
 
@@ -114,7 +122,7 @@ public:
 			 (char *)&t + len,
 			 write_begin());
 
-		write_idx_ += len;
+		add_write_idx(len);
 
 		return len;
 	}
@@ -178,7 +186,24 @@ public:
 		return strstr(read_begin(), eof);
 	}
 
+	uint64_t peek_reserve()
+	{
+		uint64_t* pointer = (uint64_t *)&*buf_.begin();
+		return *pointer;
+	}
+
 private:
+	void write_reserve(size_t len)
+	{
+		uint64_t* pointer = (uint64_t *)&*buf_.begin();
+		*pointer += len;
+	}
+
+	void read_reserve(size_t len)
+	{
+		uint64_t* pointer = (uint64_t *)&*buf_.begin();
+		*pointer -= len;
+	}
 
 	int append_string(size_t len, const char* ptr)
 	{
@@ -208,11 +233,15 @@ private:
 	void add_write_idx(size_t len)
 	{
 		write_idx_ += len;
+
+		write_reserve(len);
 	}
 
 	void add_read_idx(size_t len)
 	{
 		read_idx_ += len;
+
+		read_reserve(len);
 	}
 
 	int make_space(size_t len)
