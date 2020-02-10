@@ -10,6 +10,7 @@
 #include <endian.h>
 #include <fcntl.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 
 /* c header */
 #include <vector>
@@ -746,6 +747,7 @@ void conn_time_out(void* arg)
 
 static int work_process_cycle(cycle_t* cycle)
 {
+	printf("work_process_cycle %lu\n", gettid());
 	int ret = 0;
 	int cnt = 0;
 	int64_t time_out = -1;
@@ -789,6 +791,7 @@ static int work_process_cycle(cycle_t* cycle)
 		/* 进程退出 */
 		if(stop)
 		{
+			stop = 0;
 			exit(0);
 		}
 
@@ -915,12 +918,65 @@ static int daemonize()
 	}
 }
 
+static void sig_handler(int signo, siginfo_t* siginfo, void* ucontext)
+{
+    char *msg;
+
+    switch (signo) {
+    case SIGINT:
+    	stop = 1;
+        printf("%s\n", "received SIGINT shutdown...");
+        break;
+    case SIGTERM:
+    	stop = 1;
+        printf("%s\n", "received SIGTERM shutdown...");
+        break;
+	case SIGCHLD:
+		child = 1;
+		for(;;)
+		{
+			int err;
+			int status;
+			pid_t pid = waitpid(-1, &status, WNOHANG);
+			if(pid >= 0)
+			{
+				return;
+			}
+			else
+			{
+				err = errno;
+				if(err = EINTR)
+				{
+					continue;
+				}
+			}
+		}
+		printf("%s\n", "received SIGCHLD fork...");
+    // default:
+    // 	stop = 1;
+    //     printf("%s\n", "received shutdown signal shutdown...");
+    };
+}
+
+/* 安装信号 handler */
+static void init_signal()
+{
+    struct sigaction act;
+    
+	act.sa_flags = SA_SIGINFO;
+	act.sa_sigaction = sig_handler;
+	sigemptyset(&act.sa_mask);
+
+	sigaction(SIGINT, &act, NULL);
+	sigaction(SIGTERM, &act, NULL);
+	sigaction(SIGCHLD, &act, NULL);
+}
+
 static int master_process_cycle(cycle_t* cycle)
 {
 	pid_t id = gettid();
-	printf("master process id:%d\n", id);
-	close(cycle->lfd);
-	printf("master close lfd\n");
+	// close(cycle->lfd);
+	// printf("master close lfd\n");
 
 	sigset_t set;
 	sigemptyset(&set);
@@ -940,6 +996,7 @@ static int master_process_cycle(cycle_t* cycle)
 
 		if(child)
 		{
+			child = 0;
 			pid_t pid = fork();
 			switch(pid)
 			{
@@ -947,51 +1004,23 @@ static int master_process_cycle(cycle_t* cycle)
 					printf("fork error!\n");
 					break;
 				case 0:
-					/* 子进程 */
-					work_process_cycle(cycle);
+					goto CHILD;
 					return 0;
-				default:
-					break;
 			}
 		}
+
+		if(stop)
+		{
+			stop = 0;
+			exit(0);
+		}
 	}
+CHILD:
+	init_signal();
+	/* 子进程 */
+	work_process_cycle(cycle);
 	
 	return 0;
-}
-
-static void sig_handler(int signo, siginfo_t* siginfo, void* ucontext)
-{
-    char *msg;
-
-    switch (signo) {
-    case SIGINT:
-    	stop = 1;
-        printf("%s\n", "received SIGINT shutdown...");
-        break;
-    case SIGTERM:
-    	stop = 1;
-        printf("%s\n", "received SIGTERM shutdown...");
-        break;
-	case SIGCHLD:
-		child = 1;
-		printf("%s\n", "received SIGCHLD fork...");
-    default:
-        printf("%s\n", "received shutdown signal shutdown...");
-    };
-}
-
-/* 安装信号 handler */
-static void init_signal()
-{
-    struct sigaction act;
-    
-	sigemptyset(&act.sa_mask);
-	act.sa_flags = SA_SIGINFO;
-	act.sa_sigaction = sig_handler;
-
-	sigaction(SIGTERM, &act, NULL);
-	sigaction(SIGINT, &act, NULL);
-	sigaction(SIGCHLD, &act, NULL);
 }
 
 static void init_log()
@@ -1070,7 +1099,7 @@ int main(int argc, char* argv[])
 	printf("cpu_num=%d\n", cpu_num);
 
 	/* 为方便调试work进程，暂时先把work进程逻辑放在main流程上 */
-	for (int i = 0; i < cpu_num; ++i)
+	for (int i = 0; i < 1; ++i)
 	{
 		pid_t pid = fork();
 		switch(pid)

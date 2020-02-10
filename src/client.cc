@@ -58,10 +58,10 @@ void test_concurrence(char const *argv[])
 	}
 
 	uint64_t num = 5;
-	if(argv[2] != NULL)
-	{
-		num = stoull(argv[2]);
-	}
+	// if(argv[2] != NULL)
+	// {
+	// 	num = stoull(argv[2]);
+	// }
 
 	pthread_t ths[th];
 	for(int i = 0; i < th; i++)
@@ -154,7 +154,7 @@ void* client_handler(void* arg)
 int main(int argc, char const *argv[])
 {
 	/* 检测连接后, 定时踢掉连接 */
-	test_conn_timeout();
+	// test_conn_timeout();
 
 	/* 测试多线程并发请求服务的性能 */
 	test_concurrence(argv);
