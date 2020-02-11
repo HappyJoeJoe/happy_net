@@ -961,28 +961,28 @@ static void sig_handler(int signo, siginfo_t* siginfo, void* ucontext)
 /* 安装信号 handler */
 static void init_signal()
 {
-    struct sigaction act;
+    struct sigaction sa;
     
-	act.sa_flags = SA_SIGINFO;
-	act.sa_sigaction = sig_handler;
-	sigemptyset(&act.sa_mask);
+    sa.sa_sigaction = sig_handler;
+	sa.sa_flags = SA_SIGINFO;
+	sigemptyset(&sa.sa_mask);
 
-	sigaction(SIGINT, &act, NULL);
-	sigaction(SIGTERM, &act, NULL);
-	sigaction(SIGCHLD, &act, NULL);
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGQUIT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+	sigaction(SIGCHLD, &sa, NULL);
 }
 
 static int master_process_cycle(cycle_t* cycle)
 {
 	pid_t id = gettid();
-	// close(cycle->lfd);
-	// printf("master close lfd\n");
 
 	sigset_t set;
 	sigemptyset(&set);
+	sigaddset(&set, SIGINT);
+	sigaddset(&set, SIGQUIT);
+	sigaddset(&set, SIGTERM);
     sigaddset(&set, SIGCHLD);
-    sigaddset(&set, SIGALRM);
-    sigaddset(&set, SIGINT);
 
     if (sigprocmask(SIG_BLOCK, &set, NULL) == -1) {
     }
@@ -1016,7 +1016,12 @@ static int master_process_cycle(cycle_t* cycle)
 		}
 	}
 CHILD:
-	init_signal();
+	/* 此信号代码块可以删除SIGINT, SIGQUIT等信号在子进程的信号掩码, 此时子进程对这些信号开放 */
+	// sigdelset(&set, SIGINT);
+	// sigdelset(&set, SIGQUIT);
+	// sigdelset(&set, SIGTERM);
+	// sigprocmask(SIG_SETMASK, &set, NULL);
+
 	/* 子进程 */
 	work_process_cycle(cycle);
 	
