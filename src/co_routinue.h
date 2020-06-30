@@ -1,6 +1,6 @@
 /**********************************
  *@项目名称: 协程库
- *@文件名称: co_thread.h
+ *@文件名称: co_routinue.h
  *@Date 2018-05-16 18:00:00
  *@Author jiabo.zhou
  *@Copyright（C）: 2014-2020 fancy Inc.   All rights reserved.

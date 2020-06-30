@@ -30,10 +30,9 @@ int co_schedule::create(co_func_t func, void* arg)
 	co_routinue_t* t = NULL;
 	co_schedule_t* s = NULL;
 	pid_t tid = gettid();
-	g_co_routinue_per_thread_iter iter = g_co_routinue_per_thread.find(tid);
-	if(g_co_routinue_per_thread.end() == iter)
+	if(g_co_routinue_per_thread.end() == g_co_routinue_per_thread.find(tid))
 	{
-		g_co_routinue_per_thread[tid] = new co_schedule_t();
+		g_co_routinue_per_thread[tid] = new co_schedule_t();	
 	}
 
 	s = g_co_routinue_per_thread[tid];
@@ -78,8 +77,8 @@ int co_schedule::resume(int id)
 {
 	pid_t tid = gettid();
 
-	g_co_routinue_per_thread_iter iter = g_co_routinue_per_thread.find(tid);
-	if(g_co_routinue_per_thread.end() == iter) return -1;
+	if(g_co_routinue_per_thread.end() == g_co_routinue_per_thread.find(tid))
+		return -1;
 	
 	co_schedule_t* s = g_co_routinue_per_thread[tid];
 
@@ -118,8 +117,8 @@ int co_schedule::yield()
 {
 	pid_t tid = gettid();
 
-	g_co_routinue_per_thread_iter iter = g_co_routinue_per_thread.find(tid);
-	if(g_co_routinue_per_thread.end() == iter) return -1;
+	if(g_co_routinue_per_thread.end() == g_co_routinue_per_thread.find(tid))
+		return -1;
 	
 	co_schedule_t* s = g_co_routinue_per_thread[tid];
 
@@ -143,8 +142,8 @@ int co_schedule::release()
 {
 	pid_t tid = gettid();
 
-	g_co_routinue_per_thread_iter iter = g_co_routinue_per_thread.find(tid);
-	if(g_co_routinue_per_thread.end() == iter) return 0;
+	if(g_co_routinue_per_thread.end() == g_co_routinue_per_thread.find(tid))
+		return 0;
 	
 	co_schedule_t* s = g_co_routinue_per_thread[tid];
 	sche_stack_iter it = s->threads.begin();
@@ -175,8 +174,8 @@ int co_schedule::cur()
 {
 	pid_t tid = gettid();
 
-	g_co_routinue_per_thread_iter iter = g_co_routinue_per_thread.find(tid);
-	if(g_co_routinue_per_thread.end() == iter) return 0;
+	if(g_co_routinue_per_thread.end() == g_co_routinue_per_thread.find(tid))
+		return 0;
 
 	co_schedule_t* s = g_co_routinue_per_thread[tid];
 	co_routinue_t* cur = s->threads[s->running];

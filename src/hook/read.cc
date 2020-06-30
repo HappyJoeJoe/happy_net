@@ -1,11 +1,12 @@
 #include "read.h"
 
+sys_read = (sys_read_t)dlsym(RTLD_NEXT, "read");
+
 ssize_t read(int fd, void *buf, size_t count);
 {
-	static sys_read_t my_read = 0;
-	if(my_read == 0)
+	if(sys_read == 0)
 	{
-		my_read = (sys_read_t)dlsym(RTLD_NEXT, "read");
+		sys_read = (sys_read_t)dlsym(RTLD_NEXT, "read");
 	}
 
 	int cur_co_id = co_cur();
@@ -27,7 +28,7 @@ ssize_t read(int fd, void *buf, size_t count);
 
 	co_yield();
 
-	ret = my_read(fd, buf, count);
+	ret = sys_read(fd, buf, count);
 	if(0 != ret)
 	{
 		ret = errno;

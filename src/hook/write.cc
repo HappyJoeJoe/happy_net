@@ -1,11 +1,12 @@
 #include "write.h"
 
+sys_write = (sys_read_t)dlsym(RTLD_NEXT, "write");
+
 ssize_t write(int fd, void *buf, size_t count);
 {
-	static sys_write_t my_write = 0;
-	if(my_write == 0)
+	if(sys_write == 0)
 	{
-		my_write = (sys_write_t)dlsym(RTLD_NEXT, "write");
+		sys_write = (sys_write_t)dlsym(RTLD_NEXT, "write");
 	}
 
 	int cur_co_id = co_cur();
@@ -27,7 +28,7 @@ ssize_t write(int fd, void *buf, size_t count);
 
 	co_yield();
 
-	ret = my_write(fd, buf, count);
+	ret = sys_write(fd, buf, count);
 	if(0 != ret)
 	{
 		ret = errno;

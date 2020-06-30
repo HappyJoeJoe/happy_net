@@ -976,14 +976,27 @@ static void init_signal()
 static int master_process_cycle(cycle_t* cycle)
 {
 	pid_t id = gettid();
+	// close(cycle->lfd);
+	// printf("master close lfd\n");
 
 	sigset_t set;
 	sigemptyset(&set);
-	sigaddset(&set, SIGINT);
-	sigaddset(&set, SIGQUIT);
-	sigaddset(&set, SIGTERM);
-    sigaddset(&set, SIGCHLD);
-
+	/* 1:  本信号在用户终端连接(正常或非正常)结束时发出, 通常是在终端的控制进程结束时, 通知同一session内的各个作业, 这时它们与控制终端不再关联。
+     *     登录Linux时，系统会分配给登录用户一个终端(Session)。在这个终端运行的所有程序，包括前台进程组和后台进程组，一般都属于这个Session。
+     *     当用户退出Linux登录时，前台进程组和后台有对终端输出的进程将会收到SIGHUP信号。这个信号的默认操作为终止进程，因此前台进程组和后台有终端输出的进程就会中止。
+     *     不过可以捕获这个信号，比如wget能捕获SIGHUP信号，并忽略它，这样就算退出了Linux登录，wget也能继续下载。
+     *     此外，对于与终端脱离关系的守护进程，这个信号用于通知它重新读取配置文件 
+     */
+	sigaddset(&set, SIGHUP);
+	sigaddset(&set, SIGINT);  /* 2:  程序终止(interrupt)信号, 在用户键入INTR字符(通常是Ctrl-C)时发出 */
+	sigaddset(&set, SIGQUIT); /* 3:  和 SIGINT 类似, 但由QUIT字符(通常是Ctrl-\)来控制. 进程在因收到SIGQUIT退出时会产生core文件 */
+	sigaddset(&set, SIGUSR1); /* 10: 留给用户 */
+    sigaddset(&set, SIGUSR2); /* 12: 留给用户 */
+	sigaddset(&set, SIGALRM); /* 14: 时钟定时信号, 计算的是实际的时间或时钟时间. alarm函数使用该信号 */
+	sigaddset(&set, SIGTERM); /* 15: 程序结束(terminate)信号, 与SIGKILL不同的是该信号可以被阻塞和处理。通常用来要求程序自己正常退出 */
+    sigaddset(&set, SIGCHLD); /* 17: 子进程结束时, 父进程会收到这个信号 */
+    sigaddset(&set, SIGIO);   /* 29: 文件描述符准备就绪, 可以开始进行输入/输出操作 */
+    
     if (sigprocmask(SIG_BLOCK, &set, NULL) == -1) {
     }
 
@@ -992,6 +1005,20 @@ static int master_process_cycle(cycle_t* cycle)
 	while(1)
 	{
 		printf("master_process_cycle %d\n", id);
+
+		/* set此时为空, 暗示了框架对所有信号都开放, 当收到信号后执行信号处理器 sig_handler
+         * 此时 sigsuspend 从信号处理器中返回继续往下执行, 同时恢复修改信号掩码之前的旧掩码,
+         * 
+         * sigsuspend(&set) 等价于:
+         * 1. sigprocmask(SIG_SETMASK, set, old)
+         * 2. pause()
+         * 3. sigprocmask(SIG_SETMASK, old, NULL)
+         * ------------------------------------------------------------------------------------------
+         * 此时这个语句的意思是, 由于 sigprocmask(SIG_BLOCK, &set, NULL) 已经将许多信号阻隔在信号屏蔽字里,
+         * 所以此刻 sigsuspend 与 sigprocmask 之间的语句是临界区域, 不受信号干扰
+         * set 信号集由于此时已被清空, 所以 sigsuspend(&set) 此刻不阻塞任何信号并等待所有信号的到来并捕获执行信号处理器 sig_handler
+         * 当执行完 sig_handler 后返回, 返回后 sigsuspend 会恢复为 sigemptyset(&set) 之前的值, 即对各种信号字的屏蔽
+         */
 		sigsuspend(&set);
 
 		if(child)
