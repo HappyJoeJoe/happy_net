@@ -5,7 +5,7 @@ int pthread_cond_wait(pthread_cond_t* cond, pthread_mutex_t* mutex);
 包含的语义: 以下三步是原子性的
 1) 对 mutex 解锁
 2) 阻塞当前调用线程，并等待相应的信号量 cond 被其他线程的 pthread_cond_signal or pthread_cond_broadcast 通知
-3) 从当前线程醒来
+3) 从当前线程醒来，再次获取互斥锁
 
 
 如何访问共享变量:
